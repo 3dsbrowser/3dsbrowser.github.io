@@ -8117,7 +8117,7 @@ function createExecutionController(send){
  const post=()=>send({type:'state',...machine.snapshot(),running,busy,clockMultiplier,gameFrames,perf:perf.last,gpuWasm:typeof WasmGPU!=='undefined'?{available:WasmGPU.available,error:WasmGPU.error,draws:WasmGPU.stats.draws,pixels:WasmGPU.stats.pixels,misses:WasmGPU.stats.misses}:null,wasm:typeof WasmARM!=='undefined'?{available:WasmARM.available,error:WasmARM.error,blocks:WasmARM.stats.blocks,instructions:WasmARM.stats.instructions}:null});
  function sendGuestPreview(strict=false,targets=null){
   if(!machine.memory){if(strict)throw Error('Load an executable before refreshing the LCD scanout.');return false;}
-  const fid=++sentFid;
+  const fid=sentFid+1;
   // GSP reports actual LCD scanout buffers, which differ from the current PICA draw target.
   // Both screens are stored in 240-wide, portrait-rotated guest memory.
   const screens=machine.kernel?.gsp?.framebuffers;
@@ -8127,7 +8127,7 @@ function createExecutionController(send){
    if(typeof PICAWebGL!=='undefined'&&PICAWebGL.active&&PM.mode==='bitmap'){
     const q=list.map(([screen,height])=>{const d=screens[screen];if(targets?.only&&!targets[screen])return {addr:-1,w:0,h:0,fmt:-1};return d&&d.left?{addr:(targets&&targets[screen])||d.left,w:240,h:height,fmt:d.format&7,stride:d.stride|0}:{addr:-1,w:0,h:0,fmt:-1};});
     const r=PICAWebGL.present(machine.memory,q);
-    if(r){done=r.shown;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
+    if(r){done=r.shown;sentFid=fid;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
    }
    for(let si=0;si<list.length;si++){const [screen,height]=list[si];if(done[si])continue;
     const d=screens[screen];if(!d||!d.left||(targets?.only&&!targets[screen]))continue;const address=(targets&&targets[screen])||d.left;
@@ -8136,12 +8136,14 @@ function createExecutionController(send){
      const frame=PICA200.GPU.decodeFramebuffer(machine.memory,{
       address,width:240,height,format:d.format&7,stride:d.stride
      });
-     send({type:'guest-screen',fid,screen,source:'GSP LCD scanout',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);
+     sentFid=fid;send({type:'guest-screen',fid,screen,source:'GSP LCD scanout',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);
      success=true;
     }catch(e){lastError=e;}
    }
    if(success)return true;
   }
+  // A selective frame update must never fall back to an unrelated draw target.
+  if(targets?.only)return false;
   // Before GSP establishes an LCD buffer, an intermediate raster target can
   // still show useful progress, but do not mislabel it as top-screen output.
   if(machine.gpu?.rasterizedDraws){
@@ -8151,7 +8153,7 @@ function createExecutionController(send){
     try{
      const address=PICA200.GPU.gpuToVirtual((r[0x11d]<<3)>>>0);
      const frame=PICA200.GPU.decodeTiledTexture(machine.memory,{address,width,height,format,flipY:true});
-     send({type:'guest-screen',fid,screen:'bottom',source:'intermediate PICA render target',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);return true;
+     sentFid=fid;send({type:'guest-screen',fid,screen:'bottom',source:'intermediate PICA render target',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);return true;
     }catch(e){lastError=e;}
    }
   }
@@ -8302,17 +8304,22 @@ function receive(data){
 // Frames are drawn on the next animation frame; if newer ones arrive first the
 // older ones are dropped, so a busy phone never builds up a backlog. The
 // worker waits for the acknowledgement before sending more than two ahead.
-const framePending={bitmap:null,top:null,bottom:null};let frameRAF=0,frameAck=0;
+const framePending={top:null,bottom:null};let frameRAF=0,frameAck=0;
+// A bitmap can contain one or both screens. Retain it until every pending
+// screen using it is replaced or drawn, so partial updates do not erase each other.
+function releaseFrame(f){if(f?.owner&&!--f.owner.refs)f.owner.bitmap.close?.();}
 function queueFrame(data){
- if(data.type==='guest-bitmap'){if(framePending.bitmap)framePending.bitmap.bitmap.close?.();framePending.bitmap=data;for(const sc of data.screens)framePending[sc.screen]=null;}
- else{framePending[data.screen]=data;const b=framePending.bitmap;if(b){b.screens=b.screens.filter(sc=>sc.screen!==data.screen);}}
+ if(data.type==='guest-bitmap'){
+  const owner={bitmap:data.bitmap,refs:0};
+  for(const sc of data.screens){releaseFrame(framePending[sc.screen]);owner.refs++;framePending[sc.screen]={...sc,bitmap:data.bitmap,topLit:data.topLit,owner};}
+  if(!owner.refs)data.bitmap.close?.();
+ }else{releaseFrame(framePending[data.screen]);framePending[data.screen]=data;}
  frameAck=Math.max(frameAck,data.fid|0);
  if(!frameRAF)frameRAF=requestAnimationFrame(drawFrames);}
-function drawFrames(){frameRAF=0;const b=framePending.bitmap,t=framePending.top,bo=framePending.bottom;
- framePending.bitmap=framePending.top=framePending.bottom=null;
- try{if(b){for(const sc of b.screens)showScreen({...sc,bitmap:b.bitmap,topLit:b.topLit});}
-  if(t)showScreen(t);if(bo)showScreen(bo);}
- finally{b?.bitmap?.close?.();if(frameAck)execute({type:'frame-ack',fid:frameAck});}}
+function drawFrames(){frameRAF=0;const t=framePending.top,bo=framePending.bottom;
+ framePending.top=framePending.bottom=null;
+ try{if(t)showScreen(t);if(bo)showScreen(bo);}
+ finally{releaseFrame(t);releaseFrame(bo);if(frameAck)execute({type:'frame-ack',fid:frameAck});}}
 function showScreen(data){if(data.screen==='top')fpsShown++;
   const bmp=data.bitmap||null,sx=data.sx|0;
   {
