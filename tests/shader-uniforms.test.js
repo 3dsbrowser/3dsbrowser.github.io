@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm');
+const s=fs.readFileSync(process.argv[2]||'index.html','utf8'),c={};vm.createContext(c);
+const i=s.indexOf('const lit=x=>'),a=s.indexOf('function stageInfo(g)'),b=s.indexOf('function fragmentSource(',a);
+vm.runInContext(s.slice(i,s.indexOf('// GLSL mirror',i))+s.slice(a,b),c);
+const g={regs:new Uint32Array(0x300)};g.regs[0xc0]=0x000e000e;g.regs[0xc3]=0xff010203;g.regs[0xfd]=0x11223344;g.regs[0x104]=0x1021;
+const shader=c.tevGLSL(g,null),alpha=c.alphaGLSL(g);g.regs[0xc3]=0x00090807;g.regs[0xfd]=0x66778899;g.regs[0x104]=0xff21;
+if(shader!==c.tevGLSL(g,null)||alpha!==c.alphaGLSL(g)||!shader.includes('uC0')||!shader.includes('uBuf')||!alpha.includes('uAlphaRef'))throw Error('dynamic values changed shader source');
+g.regs[0x104]=0xff31;if(alpha===c.alphaGLSL(g))throw Error('alpha function not specialized');
+let calls=[],flushes=0;const ctx={g,p:{uConst:[1,null,null,null,null,null],uBuf:2,uAlphaRef:3},FL:()=>flushes++,gl:{uniform4f:(...a)=>calls.push(a),uniform1f:(...a)=>calls.push(a)}};vm.createContext(ctx);
+const start=s.indexOf(' {const ids=[0xc3,0xcb'),end=s.indexOf('\n const T=GC.tx',start),block=s.slice(start,end);vm.runInContext(block,ctx);
+if(calls.length!==3||flushes!==3||calls[0].slice(1).join()!=='7,8,9,0')throw Error('uniform upload mismatch');calls=[];vm.runInContext(block,ctx);if(calls.length)throw Error('unchanged uniforms uploaded');g.regs[0xc3]=0x04030201;vm.runInContext(block,ctx);if(calls.length!==1||calls[0].slice(1).join()!=='1,2,3,4')throw Error('changed uniform not uploaded');console.log('PASS: shader reuse, uniform updates, and batch flushing');
