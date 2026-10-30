@@ -6708,10 +6708,10 @@ function tevGLSL(g,light){
  const comb=(mode,a,b,c)=>{switch(mode){case 0:return a;case 1:return '('+a+'*'+b+'/255.0)';case 2:return '('+a+'+'+b+')';
   case 3:return '('+a+'+'+b+'-128.0)';case 4:return '(('+a+'*'+c+'+'+b+'*(255.0-'+c+'))/255.0)';case 5:return '('+a+'-'+b+')';
   case 8:return '('+a+'*'+b+'/255.0+'+c+')';case 9:return '(min('+a+'+'+b+',255.0)*'+c+'/255.0)';default:return a;}};
- let code='vec4 prev=prim;vec4 pbuf=vec4(0.0),nbuf=vec4('+lit(bc&255)+','+lit((bc>>>8)&255)+','+lit((bc>>>16)&255)+','+lit(bc>>>24)+');';
+ let code='vec4 prev=prim;vec4 pbuf=vec4(0.0),nbuf=uBuf;';
  for(const s of live){const k=s.k,c=s.constant;
   if(!s.pass){
-   code+='{const vec4 C'+k+'=vec4('+lit(c&255)+','+lit((c>>>8)&255)+','+lit((c>>>16)&255)+','+lit(c>>>24)+');';
+   code+='{vec4 C'+k+'=uC'+k+';';
    const r=[0,1,2].map(j=>srcExpr((s.src>>>(4*j))&15,k)),a=[0,1,2].map(j=>srcExpr((s.src>>>(16+4*j))&15,k));
    const ro=[s.operand&15,(s.operand>>>4)&15,(s.operand>>>8)&15],ao=[(s.operand>>>12)&7,(s.operand>>>16)&7,(s.operand>>>20)&7];
    const rm=s.comb&15,am=(s.comb>>>16)&15,rs=1<<Math.min(2,s.scale&3),as=1<<Math.min(2,(s.scale>>>16)&3);
@@ -6727,7 +6727,7 @@ function tevGLSL(g,light){
   if(k<4){code+='pbuf=nbuf;';if(updRGB&(1<<k))code+='nbuf.rgb=prev.rgb;';if(updA&(1<<k))code+='nbuf.a=prev.a;';}}
  return code+'vec4 res=prev;';}
 function alphaGLSL(g){const at=g.regs[0x104]>>>0;if(!(at&1))return '';
- const ref=lit((at>>>8)&255),fn=(at>>>4)&7;
+ const ref='uAlphaRef',fn=(at>>>4)&7;
  const cond=[ 'false','true','res.a=='+ref,'res.a!='+ref,'res.a<'+ref,'res.a<='+ref,'res.a>'+ref,'res.a>='+ref][fn];
  return 'if(!('+cond+'))discard;';}
 function fragmentSource(g,light){
@@ -6738,6 +6738,7 @@ function fragmentSource(g,light){
 precision highp float;precision highp int;precision highp sampler2D;
 in vec4 vCol;in vec2 vUV;in vec2 vUV1;in vec2 vUV2;in vec4 vNQ;in vec3 vView;out vec4 oCol;
 uniform sampler2D uTex;uniform sampler2D uTex1;uniform sampler2D uTex2;uniform sampler2D uLut;
+uniform vec4 uC0,uC1,uC2,uC3,uC4,uC5,uBuf;uniform float uAlphaRef;
 uniform ivec2 uSize;uniform ivec2 uWrap;uniform vec4 uBorder;
 uniform ivec2 uSize1;uniform ivec2 uWrap1;uniform vec4 uBorder1;
 uniform ivec2 uSize2;uniform ivec2 uWrap2;uniform vec4 uBorder2;
@@ -6988,14 +6989,17 @@ function hwDraw(g,p,D,shader){
  stats.hwDraws=(stats.hwDraws|0)+1;stats.hwVerts=(stats.hwVerts|0)+D.cnt;}
 const progKeys=new Map();
 function programFor(g,light,hwd){const R=g.regs;let hA=0x811c9dc5,hB=0x9e3779b9;
- for(let i=0xc0;i<0x100;i++){const x=R[i]|0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
- const ck=(R[0x80]&0x3007)+'|'+(R[0x104]>>>0)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
+ // Constant colours and alpha reference are uniforms, so only preserve the
+ // zero/nonzero distinction needed by stageInfo's empty-stage rule in the key.
+ for(let i=0xc0;i<0x100;i++){let x=R[i]|0;if(i===0xfd)x=0;else if(i===0xc3||i===0xcb||i===0xd3||i===0xdb||i===0xf3||i===0xfb)x=x?1:0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
+ const ck=(R[0x80]&0x3007)+'|'+(R[0x104]&0x71)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
  let p=progKeys.get(ck);if(p)return p;
  if(hwd){const u=(HW.uses.get(ck)|0)+1;if(HW.uses.size>4096)HW.uses.clear();HW.uses.set(ck,u);if(u<HW.PROMOTE)return null;if(HW.pend.size>=HW.MAXPEND){for(const q of [...HW.pend])progReady(q);if(HW.pend.size>=HW.MAXPEND)return null;}}
  p=programForSlow(g,light,hwd);if(progKeys.size>2048)progKeys.clear();progKeys.set(ck,p);return p;}
 let vsObj=null,PSC;
 function progUniforms(p){if(p.isHW)hwUniforms(p);const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);
  p.uTex=[U('uTex'),U('uTex1'),U('uTex2')];p.uSize=[U('uSize'),U('uSize1'),U('uSize2')];p.uWrap=[U('uWrap'),U('uWrap1'),U('uWrap2')];p.uBorder=[U('uBorder'),U('uBorder1'),U('uBorder2')];
+ p.uConst=[0,1,2,3,4,5].map(i=>U('uC'+i));p.uBuf=U('uBuf');p.uAlphaRef=U('uAlphaRef');
  p.uLut=U('uLut');p.uLPos=U('uLPos');p.uLS0=U('uLS0');p.uLS1=U('uLS1');p.uLDif=U('uLDif');p.uLAmb=U('uLAmb');p.uLSpot=U('uLSpot');p.uLDA=U('uLDA');p.uLGAmb=U('uLGAmb');}
 // Shader compiles can take 100 ms-seconds each on desktop drivers (ANGLE/D3D). With KHR_parallel_shader_compile they
 // run on driver threads; a draw whose program is not ready yet is skipped instead of stalling the whole emulator.
@@ -7302,6 +7306,12 @@ function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,src
    gl.blendEquationSeparate(E[eqRgb],E[eqA]);gl.blendFuncSeparate(F[srcRgb],F[dstRgb],F[srcA],F[dstA]);
    gl.blendColor((bc&255)/255,((bc>>>8)&255)/255,((bc>>>16)&255)/255,(bc>>>24)/255);}
    else gl.disable(gl.BLEND);GC.bl=bk;}}
+ // Shader constants vary per draw. Uniform changes flush queued vertices first,
+ // so batches always use the values that were active when they were submitted.
+ {const ids=[0xc3,0xcb,0xd3,0xdb,0xf3,0xfb],old=p.cv||(p.cv=[]);
+  for(let i=0;i<6;i++){const v=g.regs[ids[i]]>>>0,loc=p.uConst[i];if(loc!==null&&old[i]!==v){FL();old[i]=v;gl.uniform4f(loc,v&255,(v>>>8)&255,(v>>>16)&255,v>>>24);}}
+  const v=g.regs[0xfd]>>>0;if(p.uBuf!==null&&p.bv!==v){FL();p.bv=v;gl.uniform4f(p.uBuf,v&255,(v>>>8)&255,(v>>>16)&255,v>>>24);}
+  const ref=(g.regs[0x104]>>>8)&255;if(p.uAlphaRef!==null&&p.av!==ref){FL();p.av=ref;gl.uniform1f(p.uAlphaRef,ref);}}
  const T=GC.tx||(GC.tx=[null,null,null,null,null]);
  for(let u=0;u<3;u++){const t=tex[u];
   if(t){if(T[u]!==t.tex){FL();gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t.tex);T[u]=t.tex;}
