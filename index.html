@@ -6491,7 +6491,7 @@ function invalidateRange(m,addr,len,wholeOverwrite=false){if(!gl)return;addr>>>=
 // per pixel in memory -> clear colour R,G,B,A), so the target stays valid on
 // both sides and no re-upload is needed; anything else falls back to invalidate.
 function fill(m,base,end,value,width){if(!gl)return;gcReset();base>>>=0;end>>>=0;
- for(const d of depthBufs.values()){if(d.mem!==m||base>d.addr||end<d.addr+d.len)continue;const mask=d.bytes===2?0xffff:0xffffff;d.pendingClear=((value>>>0)&mask)/mask;d.clearPending=true;}for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,base,end-base))materialize(l);
+ for(const d of depthBufs.values()){if(d.mem!==m||base>d.addr||end<d.addr+d.len)continue;const mask=d.bytes===2?0xffff:0xffffff;d.pendingClear=((value>>>0)&mask)/mask;d.clearPending=true;}for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,base,end-base)){if(base<=l.dst&&end>=l.dst+l.len){l.pending=false;stats.discardedReadbacks=(stats.discardedReadbacks|0)+1;}else materialize(l);}
  for(const rt of rts.values()){if(rt.mem!==m||!overlaps(rt.addr,rt.len,base,end-base))continue;
   const fw=[4,3,2,2,2][rt.fmt];
   if(width===fw&&base<=rt.addr&&end>=rt.addr+rt.len&&((rt.addr-base)%fw)===0){
@@ -7312,7 +7312,7 @@ function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
 function drawGL(...a){const t0=performance.now();try{return drawGL_(...a);}finally{stats.msGL=(stats.msGL||0)+performance.now()-t0;}}
 function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,GJ,HWD,HSH){
  const rt=rtFor(m,addr,width,height,(g.regs[0x117]>>>16)&7);if(rt.memStale)upload(rt);
- const TP=performance.now();let p;try{p=programFor(g,light,HWD);if(!p)return {hwFail:true,soft:true};}catch(e){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(e&&e.message).slice(0,300);return {hwFail:true};}throw e;}if(p.pending&&!progReady(p)){if(HWD)return {hwFail:true,soft:true};return {pixels:0,triangles:0,width,height,format:0,address:addr};}if(p.failed){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(p.failed).slice(0,300);return {hwFail:true};}throw Error(p.failed);}const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
+ const TP=performance.now();let p;try{p=programFor(g,light,HWD);if(!p)return {hwFail:true,soft:true};}catch(e){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(e&&e.message).slice(0,300);return {hwFail:true};}throw e;}if(p.pending&&!progReady(p)){if(HWD)return {hwFail:true,soft:true};return null;}if(p.failed){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(p.failed).slice(0,300);return {hwFail:true};}throw Error(p.failed);}const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
  // GC mirrors the GL state this function sets; other GL users call gcReset(). Unchanged state costs no GL call
  // (each call is an IPC round trip on mobile browsers).
  if(GC.fbo!==rt.fbo){FL();gl.bindFramebuffer(gl.FRAMEBUFFER,rt.fbo);GC.fbo=rt.fbo;}
