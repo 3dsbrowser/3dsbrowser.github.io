@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0318 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0319 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -323,7 +323,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0318 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0319 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -5275,40 +5275,44 @@ return {VertexShader,f24,decodeUniform24,decodeUniform32};
 
 </script>
 <script id="vpool-code" type="text/plain">
-// Vertex-shader pool worker (appended after shader-code). Shares memory with the emulator worker: the emulator fetches
-// vertex attributes into INB, bumps ctl[0]; every pool worker shades its slice and writes finished clip-space rows to OUT.
-onmessage=e=>{const d=e.data;
+// Vertex-shader pool worker (appended after shader-code). The emulator publishes jobs into a ring of S slots in shared memory
+// (ctl[0] = jobs published). Every worker walks the ring in order, shades its slice of each job's unique vertices and bumps the slot's done count.
+onmessage=e=>{const d=e.data,S=d.S,CAP=d.CAP;
  const ctl=new Int32Array(d.ctl),CODE=new Uint32Array(d.code),DESC=new Uint32Array(d.desc),UNI=new Float64Array(d.uni),INTS=new Int32Array(d.ints),BOOLS=new Int32Array(d.bools),INB=new Float32Array(d.inb),OUT=new Float32Array(d.out),PAR=new Float64Array(d.par),SEM=new Int32Array(d.sem);
  const IN=Array.from({length:16},()=>[0,0,0,1]),UA=Array.from({length:96},()=>[0,0,0,0]),BA=new Array(16).fill(false),IA=Array.from({length:4},()=>[0,0,0,0]);
- let vs=null,last=0;const w=d.index,vsCache=new Map();
+ const vsCache=new Map(),w=d.index;let next=0;
  postMessage('ready');
+ function job(s,cb){
+  const n=ctl[cb],nIn=ctl[cb+1],entry=ctl[cb+2],id=ctl[cb+3],L=ctl[cb+4],ns=ctl[cb+7];
+  let vs=vsCache.get(id);
+  if(!vs){vs=new PICAShader.VertexShader(Array.from(CODE.subarray(s*4096,s*4096+L)),Array.from(DESC.subarray(s*128,s*128+128)),UA,{bools:BA,ints:IA,entry,maxSteps:2048});
+   if(vsCache.size>=48)vsCache.delete(vsCache.keys().next().value);vsCache.set(id,vs);}
+  const ub=s*384,ib=s*16,sb=s*24,pb=s*8;
+  for(let i=0;i<96;i++){const a=UA[i];a[0]=UNI[ub+i*4];a[1]=UNI[ub+i*4+1];a[2]=UNI[ub+i*4+2];a[3]=UNI[ub+i*4+3];}
+  for(let i=0;i<16;i++)BA[i]=BOOLS[ib+i]!==0;for(let i=0;i<4;i++){const a=IA[i];a[0]=INTS[ib+i*4];a[1]=INTS[ib+i*4+1];a[2]=INTS[ib+i*4+2];a[3]=INTS[ib+i*4+3];}
+  const s0=SEM[sb],s1=SEM[sb+1],s2=SEM[sb+2],s3=SEM[sb+3],c0=SEM[sb+8],c1=SEM[sb+9],c2=SEM[sb+10],c3=SEM[sb+11],u0=SEM[sb+12],u1=SEM[sb+13],x0=SEM[sb+14],x1=SEM[sb+15],y0=SEM[sb+22],y1=SEM[sb+23],q0=SEM[sb+4],q1=SEM[sb+5],q2=SEM[sb+6],q3=SEM[sb+7],w0=SEM[sb+18],w1=SEM[sb+19],w2=SEM[sb+20];
+  const kx=PAR[pb],bx=PAR[pb+1],ky=PAR[pb+2],by=PAR[pb+3],zon=PAR[pb+4]>0,zs=PAR[pb+5],zo=PAR[pb+6];
+  for(let r=nIn;r<16;r++){const a=IN[r];a[0]=0;a[1]=0;a[2]=0;a[3]=1;}
+  const lo=Math.floor(n*w/ns),hi=Math.floor(n*(w+1)/ns),inb=s*CAP*64,ob=s*CAP*24;
+  for(let v=lo;v<hi;v++){
+   for(let r=0;r<nIn;r++){const o=inb+(v*nIn+r)*4,a=IN[r];a[0]=INB[o];a[1]=INB[o+1];a[2]=INB[o+2];a[3]=INB[o+3];}
+   const O=vs.runRaw(IN);if(O===null)throw Error('no jit');
+   const px=s0<0?0:O[s0],py=s1<0?0:O[s1],pz=s2<0?0:O[s2],pw=s3<0?0:O[s3];
+   const o=ob+v*24;
+   if(!Number.isFinite(px)||!Number.isFinite(py)||!Number.isFinite(pz)||!Number.isFinite(pw)){Atomics.store(ctl,cb+5,1);for(let k=0;k<24;k++)OUT[o+k]=0;continue;}
+   OUT[o]=kx*px+bx*pw;OUT[o+1]=ky*py+by*pw;OUT[o+2]=zon?2*zs*pz+(2*zo-1)*pw:0;OUT[o+3]=pw;
+   OUT[o+4]=c0<0?0:O[c0];OUT[o+5]=c1<0?0:O[c1];OUT[o+6]=c2<0?0:O[c2];OUT[o+7]=c3<0?0:O[c3];OUT[o+8]=u0<0?0:O[u0];OUT[o+9]=u1<0?0:O[u1];
+   OUT[o+10]=x0<0?0:O[x0];OUT[o+11]=x1<0?0:O[x1];OUT[o+12]=y0<0?0:O[y0];OUT[o+13]=y1<0?0:O[y1];
+   OUT[o+14]=q0<0?0:O[q0];OUT[o+15]=q1<0?0:O[q1];OUT[o+16]=q2<0?0:O[q2];OUT[o+17]=q3<0?0:O[q3];
+   OUT[o+18]=w0<0?0:O[w0];OUT[o+19]=w1<0?0:O[w1];OUT[o+20]=w2<0?0:O[w2];OUT[o+21]=0;OUT[o+22]=0;OUT[o+23]=0;
+  }}
  for(;;){
-  Atomics.wait(ctl,0,last);const seq=Atomics.load(ctl,0);if(seq===last)continue;last=seq;
-  try{
-   const n=ctl[2],ns=ctl[8],nIn=ctl[6];
-   {const id=ctl[4];vs=vsCache.get(id);
-    if(!vs){vs=new PICAShader.VertexShader(Array.from(CODE.subarray(0,ctl[5])),Array.from(DESC),UA,{bools:BA,ints:IA,entry:ctl[3],maxSteps:2048});
-     if(vsCache.size>=48)vsCache.delete(vsCache.keys().next().value);vsCache.set(id,vs);}}
-   for(let i=0;i<96;i++){const a=UA[i];a[0]=UNI[i*4];a[1]=UNI[i*4+1];a[2]=UNI[i*4+2];a[3]=UNI[i*4+3];}
-   for(let i=0;i<16;i++)BA[i]=BOOLS[i]!==0;for(let i=0;i<4;i++){const a=IA[i];a[0]=INTS[i*4];a[1]=INTS[i*4+1];a[2]=INTS[i*4+2];a[3]=INTS[i*4+3];}
-   const s0=SEM[0],s1=SEM[1],s2=SEM[2],s3=SEM[3],c0=SEM[8],c1=SEM[9],c2=SEM[10],c3=SEM[11],u0=SEM[12],u1=SEM[13],x0=SEM[14],x1=SEM[15],y0=SEM[22],y1=SEM[23],q0=SEM[4],q1=SEM[5],q2=SEM[6],q3=SEM[7],w0=SEM[18],w1=SEM[19],w2=SEM[20];
-   const kx=PAR[0],bx=PAR[1],ky=PAR[2],by=PAR[3],zon=PAR[4]>0,zs=PAR[5],zo=PAR[6];
-   for(let r=nIn;r<16;r++){const a=IN[r];a[0]=0;a[1]=0;a[2]=0;a[3]=1;}
-   const lo=Math.floor(n*w/ns),hi=Math.floor(n*(w+1)/ns);
-   for(let v=lo;v<hi;v++){
-    for(let r=0;r<nIn;r++){const o=(v*nIn+r)*4,a=IN[r];a[0]=INB[o];a[1]=INB[o+1];a[2]=INB[o+2];a[3]=INB[o+3];}
-    const O=vs.runRaw(IN);if(O===null)throw Error('no jit');
-    const px=s0<0?0:O[s0],py=s1<0?0:O[s1],pz=s2<0?0:O[s2],pw=s3<0?0:O[s3];
-    if(!Number.isFinite(px)||!Number.isFinite(py)||!Number.isFinite(pz)||!Number.isFinite(pw)){Atomics.store(ctl,7,1);continue;}
-    const o=v*24;
-    OUT[o]=kx*px+bx*pw;OUT[o+1]=ky*py+by*pw;OUT[o+2]=zon?2*zs*pz+(2*zo-1)*pw:0;OUT[o+3]=pw;
-    OUT[o+4]=c0<0?0:O[c0];OUT[o+5]=c1<0?0:O[c1];OUT[o+6]=c2<0?0:O[c2];OUT[o+7]=c3<0?0:O[c3];OUT[o+8]=u0<0?0:O[u0];OUT[o+9]=u1<0?0:O[u1];
-    OUT[o+10]=x0<0?0:O[x0];OUT[o+11]=x1<0?0:O[x1];OUT[o+12]=y0<0?0:O[y0];OUT[o+13]=y1<0?0:O[y1];
-    OUT[o+14]=q0<0?0:O[q0];OUT[o+15]=q1<0?0:O[q1];OUT[o+16]=q2<0?0:O[q2];OUT[o+17]=q3<0?0:O[q3];
-    OUT[o+18]=w0<0?0:O[w0];OUT[o+19]=w1<0?0:O[w1];OUT[o+20]=w2<0?0:O[w2];
-   }
-  }catch(err){Atomics.store(ctl,7,2);}
-  Atomics.add(ctl,1,1);Atomics.notify(ctl,1);
+  const head=Atomics.load(ctl,0);
+  if(next>=head){Atomics.wait(ctl,0,head);continue;}
+  const s=next%S,cb=16+s*16;
+  try{job(s,cb);}catch(err){Atomics.store(ctl,cb+5,2);}
+  Atomics.add(ctl,cb+6,1);Atomics.notify(ctl,cb+6);
+  next++;
  }
 };
 </script>
@@ -6274,8 +6278,9 @@ const ZS={on:false,s:-1,o:0};
 let GC={},attrVst=0;
 // Consecutive draws that need no GL state change are merged into one drawArrays (each GL call is an IPC
 // round trip on mobile browsers). Any state change, texture upload, readback or present flushes first.
-const PB={n:0,vst:10,buf:new Float32Array(10*3*1024)};
+const PB={n:0,vst:10,tasks:[],buf:new Float32Array(10*3*1024)};
 function flushBatch(){const n=PB.n;if(!n)return;PB.n=0;const vs=PB.vst;
+ if(PB.tasks.length){for(const t of PB.tasks)vpResolve(t.job,PB.buf,t.off,vs);PB.tasks.length=0;}
  if(GC.va!==1){gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,vbo);GC.va=1;}gl.bufferData(gl.ARRAY_BUFFER,PB.buf.subarray(0,n*vs),gl.STREAM_DRAW);
  if(attrVst!==vs){const B=vs*4;gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,4,gl.FLOAT,false,B,0);
   gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,4,gl.FLOAT,false,B,16);
@@ -6807,13 +6812,12 @@ function attempt(g,m,indexedVertices,shader,opts={}){
  const vpX=g.regs[0x68]&65535,vpY=(g.regs[0x68]>>>16)&65535;
  const mode=opts.mode||0;
  if(typeof shader.runRaw==='function'&&mode>=0&&mode<=3){
-  const T1=performance.now();let fn=fastVerticesPool(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height,VST);
-  if(fn>=0&&globalThis.VPOOL_CHECK){const a=vdata.slice(0,fn*VST);const n2=fastVertices(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height);let bad=0;if(n2!==fn)bad=1e9;else for(let i=0;i<fn*VST;i++){if(VST===24&&i%24>20)continue;const x=a[i],y=vdata[i];if(!(x===y||(Math.abs(x-y)<=1e-4*Math.max(1,Math.abs(y))))){if(!bad&&!stats.vpFirst)stats.vpFirst=[i%VST,Math.floor(i/VST),x,y,fn,VST,VP.ctl[3],VP.ctl[4],VP.ctl[5],shader.entry,shader.code.length,shader.maxSteps,VP.ctl[6],Array.from(VP.SEM.subarray(0,4)),Array.from(VP.UNI.subarray(0,8)).map(v=>+v.toFixed(2)),Array.from(shader.uniforms[0]||[]).map(v=>+v.toFixed(2))];bad++;}}stats.vpBad=(stats.vpBad|0)+bad;stats.vpChecked=(stats.vpChecked|0)+1;}
-  else if(fn===-9)fn=fastVertices(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height);stats.msVert=(stats.msVert||0)+performance.now()-T1;stats.verts=(stats.verts|0)+(fn>0?fn:0);
+  const T1=performance.now();VP.pending=null;let fn=fastVerticesPool(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height,VST);const gj=VP.pending;VP.pending=null;
+  if(fn===-9)fn=fastVertices(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height);stats.msVert=(stats.msVert||0)+performance.now()-T1;stats.verts=(stats.verts|0)+(fn>0?fn:0);
   if(fn===-1)return fallback('clip position');if(fn===-2)return fallback('vertex shader');
   if(fn>=0){const n=fn;
    if(diffMode)return diffDraw(g,m,indexedVertices,shader,opts,addr,width,height,()=>drawGL(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light));
-   return drawGL(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light);}}
+   return drawGL(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,gj);}}
  if(VST!==10)return fallback('3d slow path');
  const sem=root.PICARaster.semantic,verts=new Map();let n=0;
  const tris=[...root.PICARaster.trianglesFor(indexedVertices,mode)];
@@ -6839,18 +6843,44 @@ const FV={stamp:new Int32Array(65536),slot:new Int32Array(65536),cur:0,cache:new
  IN:Array.from({length:16},()=>[0,0,0,1]),sc8:new Uint8Array(4),sem:new Int8Array(24),plan:[]};
 FV.f32=new Float32Array(FV.sc8.buffer);
 // ------------------------------------------------- vertex-shader worker pool (needs cross-origin isolation)
-const VP={tried:false,ready:false,K:0,up:0,workers:[],key:'',stamp:new Int32Array(65536),slot:new Int32Array(65536),cur:0,idx:new Int32Array(3*4096),plan:[],sc8:new Uint8Array(4),sem:new Int8Array(24),MIN:160,ids:new Map(),nextId:0,hk:''};
+// Draws are queued: the emulator fetches the vertex inputs, publishes a job into one of S shared slots and moves on; workers shade
+// in parallel while the emulator keeps recording draws. The rows are collected when the batch is drawn (flushBatch -> vpResolve).
+const VP={tried:false,ready:false,K:0,up:0,workers:[],S:8,CAP:8192,stamp:new Int32Array(65536),slot:new Int32Array(65536),cur:0,slotIdx:[],plan:[],sc8:new Uint8Array(4),sem:new Int8Array(24),MIN:160,ids:new Map(),nextId:0,queue:[],jobs:0,pending:null};
 VP.f32=new Float32Array(VP.sc8.buffer);
 function vpInit(){
  if(typeof SharedArrayBuffer==='undefined'||!globalThis.crossOriginIsolated||!globalThis.__VPOOL_URL||typeof Worker==='undefined')return;
- try{const K=globalThis.__VPOOL_N||2;VP.K=K;const S=n=>new SharedArrayBuffer(n);
-  const b={ctl:S(64*4),code:S(4096*4),desc:S(128*4),uni:S(96*4*8),ints:S(16*4),bools:S(16*4),inb:S(65536*16*4*4),out:S(65536*24*4),par:S(8*8),sem:S(24*4)};
-  VP.b=b;VP.ctl=new Int32Array(b.ctl);VP.CODE=new Uint32Array(b.code);VP.DESC=new Uint32Array(b.desc);VP.UNI=new Float64Array(b.uni);VP.INTS=new Int32Array(b.ints);VP.BOOLS=new Int32Array(b.bools);
+ try{const K=globalThis.__VPOOL_N||2,S=VP.S,CAP=VP.CAP;VP.K=K;const SB=n=>new SharedArrayBuffer(n);
+  const b={S,CAP,ctl:SB((16+S*16)*4),code:SB(S*4096*4),desc:SB(S*128*4),uni:SB(S*384*8),ints:SB(S*16*4),bools:SB(S*16*4),inb:SB(S*CAP*64*4),out:SB(S*CAP*24*4),par:SB(S*8*8),sem:SB(S*24*4)};
+  VP.ctl=new Int32Array(b.ctl);VP.CODE=new Uint32Array(b.code);VP.DESC=new Uint32Array(b.desc);VP.UNI=new Float64Array(b.uni);VP.INTS=new Int32Array(b.ints);VP.BOOLS=new Int32Array(b.bools);
   VP.INB=new Float32Array(b.inb);VP.OUT=new Float32Array(b.out);VP.PAR=new Float64Array(b.par);VP.SEM=new Int32Array(b.sem);
-  for(let i=0;i<K;i++){const w=new Worker(globalThis.__VPOOL_URL);w.onmessage=()=>{if(++VP.up===K){VP.ready=true;}};w.onerror=()=>{VP.ready=false;VP.dead=true;};
+  for(let s=0;s<S;s++)VP.slotIdx.push(new Int32Array(0));
+  for(let i=0;i<K;i++){const w=new Worker(globalThis.__VPOOL_URL);w.onmessage=()=>{if(++VP.up===K)VP.ready=true;};w.onerror=()=>{VP.ready=false;VP.dead=true;};
    w.postMessage({...b,index:i});VP.workers.push(w);}
  }catch(e){VP.ready=false;VP.err=String(e&&e.message||e);}}
-// Same results as fastVertices, with the vertex shader run by the pool. Returns the vertex count, or -9 = not handled (use fastVertices).
+// Wait until every worker has finished job j; marks the pool dead if they never do.
+function vpWait(j){const ctl=VP.ctl,cb=16+j.slot*16;let d;const t0=performance.now();
+ while((d=Atomics.load(ctl,cb+6))<VP.K){Atomics.wait(ctl,cb+6,d,100);if(performance.now()-t0>3000){VP.dead=true;j.failed=true;return;}}
+ const f=ctl[cb+5];if(f===2){VP.dead=true;j.failed=true;}else if(f===1)stats.vpNonFinite=(stats.vpNonFinite|0)+1;}
+// Finish every queued job (used when slots run out and for jobs whose draw was abandoned).
+function vpDrain(){for(const j of VP.queue)if(!j.done){const t=performance.now();vpWait(j);stats.vpWait=(stats.vpWait||0)+performance.now()-t;j.done=true;}VP.queue.length=0;}
+// Copy a finished job's rows into the batch buffer at offset off (stride VS).
+function vpResolve(j,buf,off,VS){
+ if(!j.done){const t=performance.now();vpWait(j);stats.vpWait=(stats.vpWait||0)+performance.now()-t;j.done=true;}
+ const t1=performance.now(),OUT=VP.OUT,ob=j.slot*VP.CAP*24,I=j.idx,n=j.n;
+ if(j.failed){buf.fill(0,off,off+n*VS);}
+ else for(let i=0;i<n;i++){const o=ob+I[i]*24,dd=off+i*VS;for(let k=0;k<VS;k++)buf[dd+k]=OUT[o+k];}
+ stats.vpCopy=(stats.vpCopy||0)+performance.now()-t1;
+ if(globalThis.VPOOL_CHECK&&!j.failed&&j.save)vpVerify(j);}
+// Debug: recompute a few vertices on this thread and compare with the workers' rows.
+function vpVerify(j){try{const sv=j.save,UA=Array.from({length:96},(_,i)=>[sv.uni[i*4],sv.uni[i*4+1],sv.uni[i*4+2],sv.uni[i*4+3]]);
+ const vs=new PICAShader.VertexShader(sv.code,sv.desc,UA,{bools:sv.bools,ints:sv.ints,entry:sv.entry,maxSteps:2048});const nIn=sv.nIn,IN=Array.from({length:16},()=>[0,0,0,1]),sem=sv.sem,P=sv.par;
+ const OUT=VP.OUT,ob=j.slot*VP.CAP*24;let bad=0;const lim=Math.min(sv.uniq,40);
+ for(let v=0;v<lim;v++){for(let r=0;r<nIn;r++)for(let k=0;k<4;k++)IN[r][k]=sv.inb[(v*nIn+r)*4+k];
+  const O=vs.runRaw(IN),g=i=>sem[i]<0?0:O[sem[i]],pw=g(3);
+  const exp=[P[0]*g(0)+P[1]*pw,P[2]*g(1)+P[3]*pw,P[4]>0?2*P[5]*g(2)+(2*P[6]-1)*pw:0,pw,g(8),g(9),g(10),g(11),g(12),g(13),g(14),g(15),g(22),g(23),g(4),g(5),g(6),g(7),g(18),g(19),g(20)];
+  for(let k=0;k<21;k++){const x=OUT[ob+v*24+k],y=exp[k];if(!(Math.abs(x-y)<=1e-4*Math.max(1,Math.abs(y))))bad++;}}
+ stats.vpBad=(stats.vpBad|0)+bad;stats.vpChecked=(stats.vpChecked|0)+1;}catch(e){stats.vpBad=(stats.vpBad|0)+1e6;}}
+// Same inputs as fastVertices; returns the vertex count (rows are filled later, see VP.pending), or -9 = not handled (use fastVertices).
 function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
  if(!VP.tried){VP.tried=true;vpInit();}
  if(!VP.ready||VP.dead)return -9;
@@ -6871,14 +6901,19 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
    plan.push(phys,stride,cursor,type,comps,eb,perm,vb);if(perm+1>nIn)nIn=perm+1;cursor+=comps*eb;}}
  const N=idx.length;if(!plan.length||!N)return -9;
  const tri=(mode===0||mode===3)?Math.floor(N/3):Math.max(0,N-2);if(!tri)return -9;
- const nOut=tri*3;if(VP.idx.length<nOut)VP.idx=new Int32Array(nOut*2);
+ const nOut=tri*3;
+ // claim a slot: the ring is full when S jobs are unresolved -> draw the pending batch (resolving its jobs) first
+ while(VP.queue.length&&VP.queue[0].done)VP.queue.shift();
+ if(VP.queue.length>=VP.S){if(PB.n)flushBatch();vpDrain();}
+ const slot=VP.jobs%VP.S,CAP=VP.CAP;
+ let I=VP.slotIdx[slot];if(I.length<nOut){I=VP.slotIdx[slot]=new Int32Array(Math.max(nOut,1024)*2);}
  const P=m.pages,sc8=VP.sc8,f32=VP.f32;let cb=-1,cd=null;
  const rd=a=>{const b=(a&~4095)>>>0;if(b!==cb){const p=P.get(b);if(!p||!p.permissions.includes('r'))throw Error('vertex fetch');cb=b;cd=p.data;}return cd[a&4095];};
  const stamp=VP.stamp,slotOf=VP.slot;if(++VP.cur>0x7fffffff-2){VP.cur=1;stamp.fill(0);}const cur=VP.cur;
- const INB=VP.INB,I=VP.idx;let uniq=0;
+ const INB=VP.INB,ibase=slot*CAP*64;let uniq=0;
  const shade=id=>{if(stamp[id]===cur)return slotOf[id];
-  if(id>65535||(uniq+1)*nIn>65536*16)throw Error('vp index');
-  const o=uniq*nIn*4;for(let r=0;r<nIn;r++){INB[o+r*4]=0;INB[o+r*4+1]=0;INB[o+r*4+2]=0;INB[o+r*4+3]=1;}
+  if(id>65535||uniq>=CAP)throw Error('vp index');
+  const o=ibase+uniq*nIn*4;for(let r=0;r<nIn;r++){INB[o+r*4]=0;INB[o+r*4+1]=0;INB[o+r*4+2]=0;INB[o+r*4+3]=1;}
   for(let q=0;q<plan.length;q+=8){
    const phys=plan[q],stride=plan[q+1],off=plan[q+2],type=plan[q+3],comps=plan[q+4],eb=plan[q+5],reg=plan[q+6],vb=plan[q+7];
    const p0=(phys+id*stride+off)>>>0,a0=vb>=0?(vb+id*stride+off)>>>0:0,ob=o+reg*4;
@@ -6897,29 +6932,26 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
  }catch(e){return -9;}
  if(uniq<VP.MIN)return -9;
  const tB=performance.now();
- const ctl=VP.ctl;
- {const L=Math.min(4096,shader.code.length),sc=shader.code,sd=shader.descs;let h1=0x811c9dc5^L,h2=0x9e3779b9^(shader.entry|0);
-  for(let i=0;i<L;i++){const x=sc[i]|0;h1=Math.imul(h1^x,16777619);h2=Math.imul(h2+x,0x85ebca6b)^(h2>>>13);}
-  for(let i=0;i<128;i++){const x=(sd[i]||0)|0;h1=Math.imul(h1^x,16777619);h2=Math.imul(h2+x,0xc2b2ae35)^(h2>>>15);}
-  const hk=(h1>>>0)+'/'+(h2>>>0)+'/'+(shader.entry|0);
-  if(VP.hk!==hk){let id=VP.ids.get(hk);
-   if(id===undefined){if(VP.ids.size>=40){VP.ids.clear();}id=++VP.nextId;VP.ids.set(hk,id);}
-   for(let i=0;i<L;i++)VP.CODE[i]=sc[i]>>>0;for(let i=0;i<128;i++)VP.DESC[i]=(sd[i]||0)>>>0;
-   ctl[3]=shader.entry|0;ctl[5]=L;ctl[4]=id;VP.hk=hk;}}
- const un=shader.uniforms,U=VP.UNI;for(let i=0;i<96;i++){const v=un[i];if(v){U[i*4]=+v[0]||0;U[i*4+1]=+v[1]||0;U[i*4+2]=+v[2]||0;U[i*4+3]=+v[3]||0;}else{U[i*4]=0;U[i*4+1]=0;U[i*4+2]=0;U[i*4+3]=0;}}
- for(let i=0;i<16;i++)VP.BOOLS[i]=shader.bools[i]?1:0;for(let i=0;i<4;i++){const v=shader.ints[i]||[0,0,0,0];for(let k=0;k<4;k++)VP.INTS[i*4+k]=v[k]|0;}
- const sem=VP.sem;sem.fill(-1);{const mask=R[0x2bd];let slot=0;
-  for(let reg=0;reg<16;reg++)if(mask&(1<<reg)){const mp=R[0x50+slot]>>>0;for(let c=0;c<4;c++){const id=(mp>>>(c*8))&31;if(id<24)sem[id]=reg*4+c;}slot++;}}
- for(let i=0;i<24;i++)VP.SEM[i]=sem[i];
- const PAR=VP.PAR;PAR[0]=2*vpW/width;PAR[1]=2*(vpX+vpW)/width-1;PAR[2]=2*vpH/height;PAR[3]=2*(height-vpY-vpH)/height-1;PAR[4]=ZS.on?1:0;PAR[5]=ZS.s||0;PAR[6]=ZS.o||0;
- ctl[2]=uniq;ctl[6]=nIn;ctl[7]=0;ctl[8]=VP.K;Atomics.store(ctl,1,0);Atomics.add(ctl,0,1);Atomics.notify(ctl,0);
- const t0=performance.now();let d;while((d=Atomics.load(ctl,1))<VP.K){Atomics.wait(ctl,1,d,100);if(performance.now()-t0>3000){VP.dead=true;return -9;}}
- const tC=performance.now();stats.vpFetch=(stats.vpFetch||0)+tB-tA;stats.vpWait=(stats.vpWait||0)+tC-tB;
- if(ctl[7]!==0){VP.fails=(VP.fails|0)+1;if(ctl[7]===2){VP.dead=true;}return -9;}
- if(vdata.length<nOut*VS_)vdata=new Float32Array(nOut*VS_*2);
- const OUT=VP.OUT;for(let i=0;i<nOut;i++){const o=I[i]*24,dd=i*VS_;for(let k=0;k<VS_;k++)vdata[dd+k]=OUT[o+k];}
- stats.vpCopy=(stats.vpCopy||0)+performance.now()-tC;stats.vpDraws=(stats.vpDraws|0)+1;stats.vpVerts=(stats.vpVerts|0)+uniq;stats.vpTris=(stats.vpTris|0)+nOut/3;
- return nOut;}
+ const ctl=VP.ctl,cbase=16+slot*16;
+ // shader code/descriptors (copied into the slot; workers cache the compiled shader by content id)
+ const L=Math.min(4096,shader.code.length),sc=shader.code,sd=shader.descs;let h1=0x811c9dc5^L,h2=0x9e3779b9^(shader.entry|0);
+ for(let i=0;i<L;i++){const x=sc[i]|0;h1=Math.imul(h1^x,16777619);h2=Math.imul(h2+x,0x85ebca6b)^(h2>>>13);}
+ for(let i=0;i<128;i++){const x=(sd[i]||0)|0;h1=Math.imul(h1^x,16777619);h2=Math.imul(h2+x,0xc2b2ae35)^(h2>>>15);}
+ const hk=(h1>>>0)+'/'+(h2>>>0)+'/'+(shader.entry|0);let sid=VP.ids.get(hk);
+ if(sid===undefined){if(VP.ids.size>=40)VP.ids.clear();sid=++VP.nextId;VP.ids.set(hk,sid);}
+ const CODE=VP.CODE,DESC=VP.DESC;for(let i=0;i<L;i++)CODE[slot*4096+i]=sc[i]>>>0;for(let i=0;i<128;i++)DESC[slot*128+i]=(sd[i]||0)>>>0;
+ const un=shader.uniforms,U=VP.UNI,ub=slot*384;for(let i=0;i<96;i++){const v=un[i];if(v){U[ub+i*4]=+v[0]||0;U[ub+i*4+1]=+v[1]||0;U[ub+i*4+2]=+v[2]||0;U[ub+i*4+3]=+v[3]||0;}else{U[ub+i*4]=0;U[ub+i*4+1]=0;U[ub+i*4+2]=0;U[ub+i*4+3]=0;}}
+ const ib=slot*16;for(let i=0;i<16;i++)VP.BOOLS[ib+i]=shader.bools[i]?1:0;for(let i=0;i<4;i++){const v=shader.ints[i]||[0,0,0,0];for(let k=0;k<4;k++)VP.INTS[ib+i*4+k]=v[k]|0;}
+ const sem=VP.sem;sem.fill(-1);{const mask=R[0x2bd];let sl=0;
+  for(let reg=0;reg<16;reg++)if(mask&(1<<reg)){const mp=R[0x50+sl]>>>0;for(let c=0;c<4;c++){const id=(mp>>>(c*8))&31;if(id<24)sem[id]=reg*4+c;}sl++;}}
+ for(let i=0;i<24;i++)VP.SEM[slot*24+i]=sem[i];
+ const PAR=VP.PAR,pb=slot*8;PAR[pb]=2*vpW/width;PAR[pb+1]=2*(vpX+vpW)/width-1;PAR[pb+2]=2*vpH/height;PAR[pb+3]=2*(height-vpY-vpH)/height-1;PAR[pb+4]=ZS.on?1:0;PAR[pb+5]=ZS.s||0;PAR[pb+6]=ZS.o||0;
+ ctl[cbase]=uniq;ctl[cbase+1]=nIn;ctl[cbase+2]=shader.entry|0;ctl[cbase+3]=sid;ctl[cbase+4]=L;ctl[cbase+5]=0;ctl[cbase+7]=VP.K;Atomics.store(ctl,cbase+6,0);
+ const job={slot,idx:I,n:nOut,done:false,failed:false,uniq,save:null};
+ if(globalThis.VPOOL_CHECK)job.save={uniq,nIn,entry:shader.entry|0,code:Array.from(sc.slice?sc.slice(0,L):Array.prototype.slice.call(sc,0,L)),desc:Array.from({length:128},(_,i)=>(sd[i]||0)>>>0),uni:Float64Array.from(U.subarray(ub,ub+384)),bools:Array.from({length:16},(_,i)=>!!shader.bools[i]),ints:Array.from({length:4},(_,i)=>Array.from(shader.ints[i]||[0,0,0,0])),sem:Int8Array.from(sem),par:Float64Array.from(PAR.subarray(pb,pb+8)),inb:Float32Array.from(INB.subarray(ibase,ibase+uniq*nIn*4))};
+ VP.jobs++;VP.queue.push(job);Atomics.add(ctl,0,1);Atomics.notify(ctl,0);
+ stats.vpFetch=(stats.vpFetch||0)+tB-tA;stats.vpDraws=(stats.vpDraws|0)+1;stats.vpVerts=(stats.vpVerts|0)+uniq;stats.vpTris=(stats.vpTris|0)+nOut/3;
+ VP.pending=job;return nOut;}
 function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
  const R=g.regs,GPUc=g.constructor,IN=FV.IN;
  // attribute layout (mirrors readVertex)
@@ -6990,7 +7022,7 @@ function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
  }catch(e){return noJit?-3:-2;}
  return n;}
 function drawGL(...a){const t0=performance.now();try{return drawGL_(...a);}finally{stats.msGL=(stats.msGL||0)+performance.now()-t0;}}
-function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light){
+function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,GJ){
  const rt=rtFor(m,addr,width,height,(g.regs[0x117]>>>16)&7);if(rt.memStale)upload(rt);
  const TP=performance.now();const p=programFor(g,light);if(p.pending&&!progReady(p))return {pixels:0,triangles:0,width,height,format:0,address:addr};if(p.failed)throw Error(p.failed);const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
  // GC mirrors the GL state this function sets; other GL users call gcReset(). Unchanged state costs no GL call
@@ -7031,7 +7063,7 @@ function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,src
   up('p',p.uLPos,U.pos);up('s0',p.uLS0,U.s0);up('s1',p.uLS1,U.s1);up('d',p.uLDif,U.dif);up('a',p.uLAmb,U.amb);up('sp',p.uLSpot,U.spot);up('da',p.uLDA,U.da,true);up('g',p.uLGAmb,U.gamb);}
  if(PB.n&&PB.vst!==VST)FL();
  {const need=(PB.n+n)*VST;if(PB.buf.length<need){const nb=new Float32Array(Math.max(need,PB.buf.length*2));nb.set(PB.buf.subarray(0,PB.n*PB.vst));PB.buf=nb;}
-  PB.buf.set(vdata.subarray(0,n*VST),PB.n*VST);PB.vst=VST;PB.n+=n;if(PB.n>=30000)flushBatch();}
+  if(GJ)PB.tasks.push({job:GJ,off:PB.n*VST});else PB.buf.set(vdata.subarray(0,n*VST),PB.n*VST);PB.vst=VST;PB.n+=n;if(PB.n>=30000)flushBatch();}
  rt.gpuDirty=true;stats.draws++;
  return {pixels:0,triangles:n/3,width,height,format:0,address:addr};}
 
