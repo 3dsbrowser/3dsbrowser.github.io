@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0325 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0326 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -323,7 +323,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0325 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0326 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -6945,12 +6945,24 @@ function hwDraw(g,p,D,shader){
  {const ck=D.kx+','+D.bx+','+D.ky+','+D.by;if(H.clip!==ck){H.clip=ck;gl.uniform4f(H.uClip,D.kx,D.bx,D.ky,D.by);}
   const zk=(ZS.on?1:0)+','+(ZS.s||0)+','+(ZS.o||0);if(H.z!==zk){H.z=zk;gl.uniform3f(H.uZ,ZS.on?1:0,ZS.s||0,ZS.o||0);}}
  gl.bindVertexArray(HW.vao);GC.va=2;
- gl.bindBuffer(gl.ARRAY_BUFFER,HW.vbo);gl.bufferData(gl.ARRAY_BUFFER,HW.buf.subarray(0,D.total),gl.STREAM_DRAW);
- const T=HW_GLT();let en=0;
- for(const f of D.fields){const b=D.blocks[f.bi];gl.enableVertexAttribArray(f.perm);gl.vertexAttribPointer(f.perm,f.comps,T[f.type],false,b.stride,D.dst[f.bi]+f.off);en|=1<<f.perm;}
- for(let k=0;k<16;k++)if((HW.en&~en)&(1<<k))gl.disableVertexAttribArray(k);HW.en=en;
- gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,HW.i16.subarray(0,D.cnt),gl.STREAM_DRAW);
- gl.drawElements(D.prim===0?gl.TRIANGLES:D.prim===1?gl.TRIANGLE_STRIP:gl.TRIANGLE_FAN,D.cnt,gl.UNSIGNED_SHORT,0);
+ // vertex/index bytes go through ring buffers (bufferSubData into a big buffer that is orphaned when it wraps)
+ const R=HW.ring||(HW.ring={vs:8<<20,vo:0,is:2<<20,io:0,init:false,pk:new Int32Array(16*5)});
+ gl.bindBuffer(gl.ARRAY_BUFFER,HW.vbo);
+ if(!R.init){gl.bufferData(gl.ARRAY_BUFFER,R.vs,gl.STREAM_DRAW);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,R.is,gl.STREAM_DRAW);R.init=true;R.pk.fill(-1);}
+ let vb=0;
+ if(D.total>R.vs){gl.bufferData(gl.ARRAY_BUFFER,HW.buf.subarray(0,D.total),gl.STREAM_DRAW);R.vo=R.vs;R.pk.fill(-1);}
+ else{if(R.vo+D.total>R.vs){gl.bufferData(gl.ARRAY_BUFFER,R.vs,gl.STREAM_DRAW);R.vo=0;}
+  vb=R.vo;gl.bufferSubData(gl.ARRAY_BUFFER,vb,HW.buf,0,D.total);R.vo=(vb+D.total+15)&~15;}
+ const T=HW_GLT();let en=0;const pk=R.pk;
+ for(const f of D.fields){const b=D.blocks[f.bi],o=vb+D.dst[f.bi]+f.off,q=f.perm*5;
+  if(!(HW.en&(1<<f.perm))){gl.enableVertexAttribArray(f.perm);pk[q]=-1;}
+  if(pk[q]!==f.comps||pk[q+1]!==f.type||pk[q+2]!==b.stride||pk[q+3]!==o){gl.vertexAttribPointer(f.perm,f.comps,T[f.type],false,b.stride,o);pk[q]=f.comps;pk[q+1]=f.type;pk[q+2]=b.stride;pk[q+3]=o;}
+  en|=1<<f.perm;}
+ for(let k=0;k<16;k++)if((HW.en&~en)&(1<<k)){gl.disableVertexAttribArray(k);pk[k*5]=-1;}HW.en=en;
+ const ib=D.cnt*2;let io=0;
+ if(R.io+ib>R.is){gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,R.is,gl.STREAM_DRAW);R.io=0;}
+ io=R.io;gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,io,HW.i16,0,D.cnt);R.io=(io+ib+15)&~15;
+ gl.drawElements(D.prim===0?gl.TRIANGLES:D.prim===1?gl.TRIANGLE_STRIP:gl.TRIANGLE_FAN,D.cnt,gl.UNSIGNED_SHORT,io);
  stats.hwDraws=(stats.hwDraws|0)+1;stats.hwVerts=(stats.hwVerts|0)+D.cnt;}
 const progKeys=new Map();
 function programFor(g,light,hwd){const R=g.regs;let hA=0x811c9dc5,hB=0x9e3779b9;
