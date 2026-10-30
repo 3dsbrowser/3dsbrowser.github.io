@@ -6566,9 +6566,10 @@ function texFor_(m,g,avoidAddr,avoidLen,u=0){
  // Every 30 frames the bytes are compared anyway (safety net).
  const other=m.epoch-(m._cpuW|0)-(m._nonWrite|0)-(m._rangedW|0),ww=m._watchW|0,mg=m._mapGen|0;
  if(!trackOff&&t&&t.mem===m&&t.raw.length===len&&t.vo===other&&t.vw===ww&&t.vm===mg&&frameNo-t.vf<30){stats.texFast=(stats.texFast|0)+1;return t;}
- // Full byte compare at most every 100 ms per texture; in between a 1-in-16 word sample (cheap) must still match.
- if(t&&t.mem===m&&t.raw.length===len){const now=performance.now(),quick=now-(t.fullT||0)<100;
-  if(sameAsPages(m,base,len,t.raw,quick?16:1)){if(!quick)t.fullT=now;stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
+ // After a possible write, every byte must match before a cached texture can be reused.
+ // Sampling misses changes between sampled words and can leave corrupted graphics.
+ if(t&&t.mem===m&&t.raw.length===len){
+  if(sameAsPages(m,base,len,t.raw,1)){t.fullT=performance.now();stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
  const raw=pageCopy(m,base,len,new Uint8Array(len));if(!raw)return tn('pages');gcReset();
  if(!t){t={key,mem:m,base,len,w,h,type,tex:gl.createTexture(),raw:null};textures.set(key,t);
   gl.bindTexture(gl.TEXTURE_2D,t.tex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,w,h);
