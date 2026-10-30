@@ -3404,12 +3404,39 @@ class Kernel{
    return this.stubReply(name,head,cmdAt,cmd);
   }
   if(name==='y2r:u'){
-   // Y2R conversion is not implemented yet. Return a real event handle instead
-   // of the generic zero-handle stub, and never pretend pixels were converted.
+   // Y2R planar 8-bit conversion, adapted from Azahar/Citra (GPL-2.0-or-later).
+   // See THIRD_PARTY_NOTICES.md for source and license details.
+   const y=this.y2r??={input:0,output:0,rotation:0,alignment:0,width:0,height:0,alpha:255,coef:0,interrupt:false,buffers:{}};
+   const ok=()=>{mem.write32(cmdAt,reply(cmd,1));mem.write32(cmdAt+4,0);};
+   const value=v=>{mem.write32(cmdAt,reply(cmd,2));mem.write32(cmdAt+4,0);mem.write32(cmdAt+8,v>>>0);};
+   const setters={0x00010040:'input',0x00030040:'output',0x00050040:'rotation',0x00070040:'alignment',0x00220040:'alpha',0x000d0040:'interrupt',0x00200040:'coef',0x001a0040:'width',0x001c0040:'height'};
+   if(setters[head]){y[setters[head]]=mem.read32(cmdAt+4);return ok();}
+   const buffers={0x00100102:'Y',0x00110102:'U',0x00120102:'V',0x00130102:'YUV',0x00180102:'dst'};
+   if(buffers[head]){y.buffers[buffers[head]]={addr:mem.read32(cmdAt+4),size:mem.read32(cmdAt+8),unit:mem.read32(cmdAt+12)&65535,gap:mem.read32(cmdAt+16)&65535};return ok();}
    if(head===0x000f0000){this.y2rEvent??={type:'event',signaled:false,reset:0};
     const handle=this.createHandle(this.y2rEvent);mem.write32(cmdAt,reply(cmd,1,2));mem.write32(cmdAt+4,0);mem.write32(cmdAt+8,0);mem.write32(cmdAt+12,handle);return;}
-   if(head===0x00280000){mem.write32(cmdAt,reply(cmd,2));mem.write32(cmdAt+4,0);mem.write32(cmdAt+8,0);return;}
-   if(head===0x00260000)throw Error('Y2R StartConversion is not implemented: video frame conversion cannot be completed');
+   if(head===0x00280000)return value(0);
+   if(head===0x00260000){
+    const w=y.width,h=y.height,B=y.buffers,bpp=[4,3,2,2][y.output];
+    if(!w||w>1024||(w&7)||!h||h>1024||y.input>1||!bpp||y.rotation!==0||y.alignment>1||(y.input===1&&(h&1))||(y.alignment===1&&(h&7))||y.coef>3)
+     throw Error('Y2R unsupported conversion: input='+y.input+' output='+y.output+' rotation='+y.rotation+' alignment='+y.alignment+' size='+w+'x'+h);
+    const read=(buf,n)=>{if(!buf||!buf.unit||buf.size<n)throw Error('Y2R invalid input buffer');const out=new Uint8Array(n);
+     const extent=n+Math.floor((n-1)/buf.unit)*buf.gap;if(buf.addr+extent>0x100000000)throw Error('Y2R input range overflow');const glx=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;glx?.flushRange(mem,buf.addr,extent);
+     for(let i=0;i<n;i++)out[i]=mem.read8((buf.addr+i+Math.floor(i/buf.unit)*buf.gap)>>>0);return out;};
+    const Y=read(B.Y,w*h),chroma=w*h/(y.input===1?4:2),U8=read(B.U,chroma),V8=read(B.V,chroma),dst=B.dst,n=w*h*bpp;
+    if(!dst||!dst.unit||dst.unit%bpp||dst.size<n)throw Error('Y2R invalid output buffer');
+    const extent=n+Math.floor((n-1)/dst.unit)*dst.gap;if(dst.addr+extent>0x100000000)throw Error('Y2R output range overflow');const glx=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;glx?.invalidateRange(mem,dst.addr,extent);
+    const C=[[256,358,182,88,453,-5743,4334,-7259],[256,403,119,47,475,-6451,2684,-7505],[298,408,208,100,516,-7134,4338,-8859],[298,458,136,54,540,-7940,2460,-9249]][y.coef];
+    const clamp=v=>Math.max(0,Math.min(255,v));const px=new Uint8Array(n);
+    for(let row=0;row<h;row++)for(let col=0;col<w;col++){const q=row*w+col,ch=(y.input===1?((row>>1)*w+col)>>1:q>>1),yy=C[0]*Y[q],u=U8[ch],v=V8[ch];
+     const r=clamp((((yy+C[1]*v)>>3)+C[5]+24)>>5),g=clamp((((yy-C[2]*v-C[3]*u)>>3)+C[6]+24)>>5),b=clamp((((yy+C[4]*u)>>3)+C[7]+24)>>5);
+     const pos=y.alignment===0?q:((row>>3)*(w>>3)+(col>>3))*64+((col&1)|((row&1)<<1)|((col&2)<<1)|((row&2)<<2)|((col&4)<<2)|((row&4)<<3));const j=pos*bpp,alpha=y.alpha&255;
+     if(y.output===0){px[j]=alpha;px[j+1]=b;px[j+2]=g;px[j+3]=r;}else if(y.output===1){px[j]=b;px[j+1]=g;px[j+2]=r;}else{const z=y.output===2?((r>>3)<<11)|((g>>3)<<6)|((b>>3)<<1)|(alpha>>7):((r>>3)<<11)|((g>>2)<<5)|(b>>3);px[j]=z&255;px[j+1]=z>>>8;}}
+    for(let i=0;i<n;i++)mem.write8((dst.addr+i+Math.floor(i/dst.unit)*dst.gap)>>>0,px[i]);
+    if(y.interrupt&&this.y2rEvent){this.y2rEvent.signaled=true;this.scheduler?.wakeObject(this.y2rEvent);}
+    return ok();
+   }
+   if(head===0x002b0000||head===0x002c0000||head===0x00270000)return ok();
    return this.stubReply(name,head,cmdAt,cmd);
   }
   if(Kernel.STUB_SERVICES.has(name))return this.stubReply(name,head,cmdAt,cmd);
