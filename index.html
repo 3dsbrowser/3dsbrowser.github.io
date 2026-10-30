@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0331 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0332 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -215,7 +215,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
 </style></head><body data-view="library" data-sheet="">
 <main class="library" id="library" aria-label="Game library">
  <header class="appbar">
-  <h1>3DBS - v0.0331</h1>
+  <h1>3DBS - v0.0332</h1>
   <button type="button" class="icon" data-open-settings aria-label="Open settings" aria-haspopup="dialog" title="Settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
  </header>
  <section class="lib-section" aria-labelledby="games-title">
@@ -290,6 +290,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
   <label class="toggle-row"><span>Real-time speed<small>Keep the game at 3DS speed when the CPU runs faster</small></span><input id="speed-limit" type="checkbox" checked></label>
   <label class="toggle-row"><span>CPU recompiler<small>Auto uses WebAssembly (much faster); JavaScript is the fallback</small></span><select id="cpu-backend" aria-label="CPU recompiler"><option value="auto">Auto</option><option value="wasm">WebAssembly</option><option value="js">JavaScript</option></select></label>
   <label class="toggle-row"><span>GPU rendering (WebGL)<small id="webgl-status">Draw with the graphics card; falls back to software</small></span><input id="webgl-toggle" type="checkbox" checked></label>
+  <label class="toggle-row"><span>WebGPU display (experimental)<small id="webgpu-status">Off · 3D renderer: WebGL2</small></span><input id="webgpu-toggle" type="checkbox"></label>
   <label class="toggle-row"><span>Auto frame skip<small>Only draw the frames that are shown (about 15 per second)</small></span><input id="frame-skip" type="checkbox" checked></label>
   <label class="toggle-row"><span>Mirror bottom screen when top is blank<small>Turn off to avoid GPU screen-detection checks</small></span><input id="mirror-bottom" type="checkbox" checked></label>
   <div class="menu-info">
@@ -324,7 +325,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0331 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0332 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -6353,7 +6354,7 @@ function init(){
   gl=canvas.getContext('webgl2',{antialias:false,depth:false,stencil:false,alpha:true,premultipliedAlpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});
   if(!gl){failed='WebGL2 unavailable';return false;}
   // Per-call timing of GL entry points, shown in the HUD (which call blocks the emulator?)
-  {const T=stats.glT=stats.glT||{};const proto=Object.getPrototypeOf(gl);for(const n of Object.getOwnPropertyNames(proto)){let f;try{f=gl[n];}catch(e){continue;}if(typeof f!=='function'||n==='getExtension'||n==='getContextAttributes'||n==='isContextLost')continue;
+  if(globalThis.__GLTIMING){const T=stats.glT=stats.glT||{};const proto=Object.getPrototypeOf(gl);for(const n of Object.getOwnPropertyNames(proto)){let f;try{f=gl[n];}catch(e){continue;}if(typeof f!=='function'||n==='getExtension'||n==='getContextAttributes'||n==='isContextLost')continue;
    gl[n]=function(){const t=performance.now();const r=f.apply(gl,arguments);T[n]=(T[n]||0)+performance.now()-t;T['#'+n]=(T['#'+n]|0)+1;return r;};}}
   vao=gl.createVertexArray();gl.bindVertexArray(vao);
   vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
@@ -6966,12 +6967,11 @@ function hwPrep(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
   for(let field=0;field<num&&field<12;field++){
    const at=field<8?(cA>>>(field*4))&15:(cB>>>((field-8)*4))&15;
    if(at>=12){cursor=(cursor+3)&~3;cursor+=(at-11)*4;continue;}
-   if(at>=count||(fixed&(1<<at)))continue;
    const nib=at<8?(R[0x201]>>>(at*4))&15:(R[0x202]>>>((at-8)*4))&15,type=nib&3,comps=((nib>>>2)&3)+1,eb=[1,1,2,4][type];
    cursor=(cursor+eb-1)&~(eb-1);
    const perm=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;
    if(stride%eb||cursor%eb)return null;
-   fields.push({bi:blocks.length,off:cursor,type,comps,perm});used=true;cursor+=comps*eb;}
+   if(at<count&&!(fixed&(1<<at))){fields.push({bi:blocks.length,off:cursor,type,comps,perm});used=true;}cursor+=comps*eb;}
   if(used)blocks.push({phys,stride});}
  if(!fields.length)return null;
  let mn=0x7fffffff,mx=-1;for(let i=0;i<N;i++){const v=idx[i];if(v<mn)mn=v;if(v>mx)mx=v;}
@@ -6993,7 +6993,7 @@ let hwVsObjs=new Map();
 function hwVso(D){let o=hwVsObjs.get(D.vkey);if(!o){o=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(o,hwVsSource(D.gen,D.sem));gl.compileShader(o);if(hwVsObjs.size>96)hwVsObjs=new Map();hwVsObjs.set(D.vkey,o);}return o;}
 function hwUniforms(p){const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);p.hw={uC:U('uC'),uI:U('uI'),uBools:U('uBools'),uClip:U('uClip'),uZ:U('uZ'),uver:-1,sh:null,iv:new Int32Array(16),bm:-1,clip:'',z:''};}
 const HW_GLT=()=>[gl.BYTE,gl.UNSIGNED_BYTE,gl.SHORT,gl.FLOAT];
-const hwF=new Float32Array(384);
+const hwF=new Float32Array(384),hwFixed=Array.from({length:16},()=>[0,0,0,1]),hwFixedCache=new Float64Array(64).fill(NaN);
 function hwDraw(g,p,D,shader){
  if(!HW.ready)hwInit();const H=p.hw;
  // shader uniforms: re-sent only when the guest wrote one
@@ -7019,6 +7019,9 @@ function hwDraw(g,p,D,shader){
   if(pk[q]!==f.comps||pk[q+1]!==f.type||pk[q+2]!==b.stride||pk[q+3]!==o){gl.vertexAttribPointer(f.perm,f.comps,T[f.type],false,b.stride,o);pk[q]=f.comps;pk[q+1]=f.type;pk[q+2]=b.stride;pk[q+3]=o;}
   en|=1<<f.perm;}
  for(let k=0;k<16;k++)if((HW.en&~en)&(1<<k)){gl.disableVertexAttribArray(k);pk[k*5]=-1;}HW.en=en;
+ for(const v of hwFixed){v[0]=v[1]=v[2]=0;v[3]=1;}g.applyFixedAttributes(hwFixed);
+ for(let k=0;k<16;k++)if(!(en&(1<<k))){const v=hwFixed[k],o=k*4;
+  if(v.some((x,i)=>x!==hwFixedCache[o+i])){gl.vertexAttrib4f(k,v[0],v[1],v[2],v[3]);for(let i=0;i<4;i++)hwFixedCache[o+i]=v[i];}}
  const ib=D.cnt*2;let io=0;
  if(R.io+ib>R.is){gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,R.is,gl.STREAM_DRAW);R.io=0;}
  io=R.io;gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,io,HW.i16,0,D.cnt);R.io=(io+ib+15)&~15;
@@ -7181,12 +7184,12 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
   for(let field=0;field<num&&field<12;field++){
    const at=field<8?(cA>>>(field*4))&15:(cB>>>((field-8)*4))&15;
    if(at>=12){cursor=(cursor+3)&~3;cursor+=(at-11)*4;continue;}
-   if(at>=count||(fixed&(1<<at)))continue;
    const nib=at<8?(R[0x201]>>>(at*4))&15:(R[0x202]>>>((at-8)*4))&15,type=nib&3,comps=((nib>>>2)&3)+1,eb=[1,1,2,4][type];
    cursor=(cursor+eb-1)&~(eb-1);
    const perm=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;
    let vb=-1;try{vb=GPUc.gpuToVirtual(phys);}catch(e){vb=-1;}
-   plan.push(phys,stride,cursor,type,comps,eb,perm,vb);if(perm+1>nIn)nIn=perm+1;cursor+=comps*eb;}}
+   if(at<count&&!(fixed&(1<<at))){plan.push(phys,stride,cursor,type,comps,eb,perm,vb);if(perm+1>nIn)nIn=perm+1;}cursor+=comps*eb;}}
+ const fixedRows=[];for(let at=0;at<count&&at<12;at++)if(fixed&(1<<at)){const reg=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;fixedRows.push([reg,g.fixedAttributes[at]]);nIn=Math.max(nIn,reg+1);}
  const N=idx.length;if(!plan.length||!N)return -9;
  const tri=(mode===0||mode===3)?Math.floor(N/3):Math.max(0,N-2);if(!tri)return -9;
  const nOut=tri*3;
@@ -7202,6 +7205,7 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
  const shade=id=>{if(stamp[id]===cur)return slotOf[id];
   if(id>65535||uniq>=CAP)throw Error('vp index');
   const o=ibase+uniq*nIn*4;for(let r=0;r<nIn;r++){INB[o+r*4]=0;INB[o+r*4+1]=0;INB[o+r*4+2]=0;INB[o+r*4+3]=1;}
+  for(const [reg,v] of fixedRows)for(let k=0;k<4;k++)INB[o+reg*4+k]=v[k];
   for(let q=0;q<plan.length;q+=8){
    const phys=plan[q],stride=plan[q+1],off=plan[q+2],type=plan[q+3],comps=plan[q+4],eb=plan[q+5],reg=plan[q+6],vb=plan[q+7];
    const p0=(phys+id*stride+off)>>>0,a0=vb>=0?(vb+id*stride+off)>>>0:0,ob=o+reg*4;
@@ -7257,12 +7261,12 @@ function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
   for(let field=0;field<num&&field<12;field++){
    const at=field<8?(cA>>>(field*4))&15:(cB>>>((field-8)*4))&15;
    if(at>=12){cursor=(cursor+3)&~3;cursor+=(at-11)*4;continue;}
-   if(at>=count||(fixed&(1<<at)))continue;
    const nib=at<8?(R[0x201]>>>(at*4))&15:(R[0x202]>>>((at-8)*4))&15,type=nib&3,comps=((nib>>>2)&3)+1,eb=[1,1,2,4][type];
    cursor=(cursor+eb-1)&~(eb-1);
    const perm=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;
    let vb=-1;try{vb=GPUc.gpuToVirtual(phys);}catch(e){vb=-1;}
-   plan.push(phys,stride,cursor,type,comps,eb,perm,vb);cursor+=comps*eb;}}
+   if(at<count&&!(fixed&(1<<at)))plan.push(phys,stride,cursor,type,comps,eb,perm,vb);cursor+=comps*eb;}}
+ g.applyFixedAttributes(IN);
  // output semantic map (mirrors semantic(): later slots overwrite earlier ids)
  const sem=FV.sem;sem.fill(-1);{const mask=R[0x2bd];let slot=0;
   for(let reg=0;reg<16;reg++)if(mask&(1<<reg)){const mp=R[0x50+slot]>>>0;for(let c=0;c<4;c++){const id=(mp>>>(c*8))&31;if(id<24)sem[id]=reg*4+c;}slot++;}}
@@ -7427,6 +7431,7 @@ class GPU{
   this.vshCodeIndex=0;this.vshOpdescIndex=0;
   this.shaderInstructionWrites=0;this.shaderDescriptorWrites=0;
   this.shaderUniforms=Array.from({length:96},()=>[0,0,0,0]);this.shaderBools=Array(16).fill(false);this.shaderInts=Array.from({length:4},()=>[0,0,0,0]);
+  this.fixedAttributes=Array.from({length:16},()=>[0,0,0,1]);this.fixedAttributeIndex=0;this.fixedAttributeWords=[];
   this.uniformIndex=0;this.uniformWordQueue=[];this.uniformFormat32=false;this.uniformWrites=0;
   this.guestMemory=null;this.shaderVerticesTested=0;this.shaderVertexFailures=0;this.lastShaderFault=null;this.lastShaderOutput=null;
   this.drawContexts=[];this.rasterizedDraws=0;this.rasterizedTriangles=0;this.rasterizedPixels=0;this.rasterFailures=0;this.lastRasterFault=null;
@@ -7451,6 +7456,11 @@ class GPU{
   if(id>=0x1c8&&id<=0x1cf){const ix=this.regs[0x1c5]>>>0,type=(ix>>>8)&31,i=ix&255;
    if(type<24){const T=(this.lightLuts||(this.lightLuts=Array.from({length:24},()=>new Uint32Array(256))))[type];if(T[i]!==this.regs[id]){T[i]=this.regs[id];this.lightLutVer=(this.lightLutVer|0)+1;}}
    this.regs[0x1c5]=((ix&~255)|((i+1)&255))>>>0;}
+  // PICA default attributes are a packed float24 FIFO, separate from shader uniforms.
+  if(id===0x232){this.fixedAttributeIndex=this.regs[id]&15;this.fixedAttributeWords=[];}
+  if(id>=0x233&&id<=0x235){this.fixedAttributeWords.push(this.regs[id]);
+   if(this.fixedAttributeWords.length===3){if(this.fixedAttributeIndex<15){this.fixedAttributes[this.fixedAttributeIndex]=Shader.decodeUniform24(...this.fixedAttributeWords);this.fixedAttributeIndex++;this.regs[0x232]=this.fixedAttributeIndex;}
+    this.fixedAttributeWords=[];}}
   if(id===0x23c||id===0x23d)this._jump=id-0x23c;
   if(id===0x2b0){for(let i=0;i<16;i++)this.shaderBools[i]=!!(this.regs[id]&(1<<i));}
   if(id>=0x2b1&&id<=0x2b4){const r=id-0x2b1,v=this.regs[id];this.shaderInts[r]=[v&255,(v>>>8)&255,(v>>>16)&255,v>>>24];}
@@ -7505,6 +7515,10 @@ class GPU{
   const base=this.physicalBase(),indexReg=this.regs[0x227],address=GPU.gpuToVirtual((base+(indexReg&0x0fffffff))>>>0);
   const result=new Uint32Array(count);for(let i=0;i<count;i++)result[i]=draw.indexed?((indexReg&0x80000000)?memory.read16(address+i*2):memory.read8(address+i)):draw.vertexOffset+i;
   return result;}
+ // Copy fixed attributes through the same input permutation as array attributes.
+ applyFixedAttributes(input){const R=this.regs,mask=(R[0x202]>>>16)&0xfff,count=((R[0x202]>>>28)&15)+1;
+  for(let i=0;i<count&&i<12;i++)if(mask&(1<<i)){const reg=i<8?(R[0x2bb]>>>(i*4))&15:(R[0x2bc]>>>((i-8)*4))&15,v=this.fixedAttributes[i],d=input[reg];
+   for(let k=0;k<4;k++)d[k]=v[k];}return input;}
  // Read a single hardware-configured vertex, respecting per-attribute element alignment.
  readVertex(index,memory=this.guestMemory){if(!memory)throw Error('Missing guest memory');if(index>65535)throw Error('PICA vertex index out of range');
   const result=Array.from({length:16},()=>[0,0,0,1]),fixed=(this.regs[0x202]>>>16)&0xfff;
@@ -7519,9 +7533,9 @@ class GPU{
    for(let field=0;field<num&&field<12;field++){
     const attribute=field<8?(configA>>>(field*4))&15:(configB>>>((field-8)*4))&15;
     if(attribute>=12){cursor=(cursor+3)&~3;cursor+=(attribute-11)*4;continue;}
-    if(attribute>=count||(fixed&(1<<attribute)))continue;
-    const nib=fmtFor(attribute),type=nib&3,components=((nib>>>2)&3)+1,elementBytes=[1,1,2,4][type];
+     const nib=fmtFor(attribute),type=nib&3,components=((nib>>>2)&3)+1,elementBytes=[1,1,2,4][type];
     cursor=(cursor+elementBytes-1)&~(elementBytes-1);
+    if(attribute>=count||(fixed&(1<<attribute))){cursor+=components*elementBytes;continue;}
     const v=[0,0,0,1];for(let k=0;k<components;k++){
      const addr=GPU.gpuToVirtual(phys+cursor+k*elementBytes);
      if(type===0){const b=memory.read8(addr);v[k]=(b<<24)>>24;}
@@ -7532,7 +7546,7 @@ class GPU{
     result[perm(attribute)]=v;cursor+=components*elementBytes;
    }
   }
-  return result;
+  return this.applyFixedAttributes(result);
  }
  // Render targets that feed a display transfer are screens; anything else (face/mask textures, shadow maps)
  // is a render-to-texture pass that must run even on skipped frames or the texture stays empty forever.
@@ -7540,7 +7554,7 @@ class GPU{
  drawTargetsScreen(){const a=this.screenSrc;if(!a||!a.length)return true;
   const R=this.regs,dim=R[0x11e]>>>0,w=dim&0x7ff,h=((dim>>>12)&0x3ff)+1,pa=(R[0x11d]<<3)>>>0;
   const v=pa>=0x18000000&&pa<0x18600000?pa+0x7000000:pa>=0x20000000&&pa<0x28000000?pa-0x0c000000:-1;if(v<0)return true;
-  const len=w*h*[4,3,2,2][R[0x117]&3];for(const e of a)if(e[0]<v+len&&v<e[0]+e[1])return true;return false;}
+  const len=w*h*[4,3,2,2,2][(R[0x117]>>>16)&7];for(const e of a)if(e[0]<v+len&&v<e[0]+e[1])return true;return false;}
  probeRealDraw(draw){if(this.skipRaster){if(this.drawTargetsScreen()){this.skippedDraws++;return;}this.offscreenDraws=(this.offscreenDraws|0)+1;}if(!this.guestMemory||draw.vertices<1||this.shaderInstructionWrites===0)return;
   try{const indices0=this.readIndices(draw);const firstIndex=indices0[0];
    // One VertexShader per (code, descriptors, entry): compiledShader() builds a key from all 8K words, far too slow per draw.
@@ -8357,6 +8371,65 @@ function createExecutionController(send){
 
 
 </script>
+<script id="webgpu-display-code">
+// Optional WebGPU scanout. PICA geometry, depth and TEV still run in WebGL2.
+// No GPU->CPU readback is added: incoming ImageBitmaps are copied on the GPU.
+(function(root){'use strict';
+let device=null,pipeline=null,serial=0,wanted=false;
+const targets=new Map(),stats={frames:0,uploads:0,error:null};
+const status=text=>{const e=document.getElementById('webgpu-status');if(e)e.textContent=text;};
+const shader=`@group(0) @binding(0) var frame: texture_2d<f32>;
+@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
+ let p=array<vec2f,3>(vec2f(-1.0,-1.0),vec2f(3.0,-1.0),vec2f(-1.0,3.0));return vec4f(p[i],0.0,1.0);
+}
+@fragment fn fs(@builtin(position) p:vec4f)->@location(0) vec4f {
+ return vec4f(textureLoad(frame,vec2i(p.xy),0).rgb,1.0);
+}`;
+function restore(){for(const [id,t] of targets){t.texture?.destroy();t.context.unconfigure();const c=document.getElementById(id);if(c===t.canvas)c.replaceWith(c.cloneNode(false));}targets.clear();}
+function fail(error){stats.error=String(error?.message||error);wanted=false;serial++;restore();const d=device;device=null;pipeline=null;d?.destroy();
+ const e=document.getElementById('webgpu-toggle');if(e)e.checked=false;status('2D display fallback: '+stats.error);}
+async function setEnabled(value){wanted=!!value;const token=++serial;
+ restore();const old=device;device=null;pipeline=null;old?.destroy();
+ if(!wanted){status('Off · 3D renderer: WebGL2');return false;}
+ status('Starting WebGPU display…');let d=null;
+ try{
+  if(!navigator.gpu)throw Error('WebGPU unavailable');
+  const adapter=await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+  if(!adapter)throw Error('No WebGPU adapter');if(token!==serial)return false;
+  d=await adapter.requestDevice();if(token!==serial){d.destroy();return false;}
+  d.pushErrorScope('validation');
+  const module=d.createShaderModule({code:shader});
+  const p=await d.createRenderPipelineAsync({layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:navigator.gpu.getPreferredCanvasFormat()}]},primitive:{topology:'triangle-list'}});
+  const error=await d.popErrorScope();if(error)throw Error(error.message);
+  if(token!==serial){d.destroy();return false;}
+  device=d;pipeline=p;stats.error=null;
+  d.lost.then(info=>{if(device===d&&wanted)fail('WebGPU device lost: '+info.message);});
+  d.addEventListener('uncapturederror',event=>{if(device===d&&wanted)fail(event.error);});
+  status('Active: WebGPU display · 3D renderer: WebGL2');return true;
+ }catch(error){if(d&&d!==device)d.destroy();if(token===serial)fail(error);return false;}
+}
+function paint(canvas,data){if(!device||!pipeline||!wanted)return null;
+ try{const id=canvas.id,w=data.width,h=data.height;let t=targets.get(id);
+  if(!t||t.canvas!==canvas){
+   // A canvas cannot change context type. Preserve ID, CSS classes and dimensions.
+   const fresh=canvas.cloneNode(false);canvas.replaceWith(fresh);canvas=fresh;
+   const context=canvas.getContext('webgpu');if(!context)throw Error('WebGPU canvas unavailable');
+   t={canvas,context,w:0,h:0,texture:null,group:null};targets.set(id,t);
+   context.configure({device,format:navigator.gpu.getPreferredCanvasFormat(),alphaMode:'opaque'});
+  }
+  if(t.w!==w||t.h!==h){t.texture?.destroy();canvas.width=w;canvas.height=h;t.w=w;t.h=h;
+   t.texture=device.createTexture({size:[w,h],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+   t.group=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:t.texture.createView()}]});}
+  if(data.bitmap)device.queue.copyExternalImageToTexture({source:data.bitmap,origin:{x:data.sx|0,y:0}},{texture:t.texture},[w,h]);
+  else device.queue.writeTexture({texture:t.texture},new Uint8Array(data.rgba),{bytesPerRow:w*4,rowsPerImage:h},[w,h]);
+  const encoder=device.createCommandEncoder(),pass=encoder.beginRenderPass({colorAttachments:[{view:t.context.getCurrentTexture().createView(),loadOp:'clear',clearValue:{r:0,g:0,b:0,a:1},storeOp:'store'}]});
+  pass.setPipeline(pipeline);pass.setBindGroup(0,t.group);pass.draw(3);pass.end();device.queue.submit([encoder.finish()]);stats.frames++;stats.uploads++;return canvas;
+ }catch(error){fail(error);return null;}
+}
+root.WebGPUDisplay={setEnabled,paint,stats,get active(){return !!device&&wanted;}};
+})(globalThis);
+</script>
+
 <script>
 
 'use strict';
@@ -8408,11 +8481,12 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
   const bmp=data.bitmap||null,sx=data.sx|0;
   {
   const isBottom=data.screen==='bottom';
-  const canvas=$(isBottom?'bottom-preview':'guest-preview');
+  let canvas=$(isBottom?'bottom-preview':'guest-preview');
   let pixels=bmp?null:new Uint8ClampedArray(data.rgba);
-  const paint=c=>{if(c.width!==data.width)c.width=data.width;if(c.height!==data.height)c.height=data.height;const x=c.getContext('2d');
-   if(bmp)x.drawImage(bmp,sx,0,data.width,data.height,0,0,data.width,data.height);else x.putImageData(new ImageData(pixels,data.width,data.height),0,0);};
-  paint(canvas);
+  const paint=c=>{const gpu=WebGPUDisplay.paint(c,data);if(gpu)return gpu;c=$(c.id);
+   if(c.width!==data.width)c.width=data.width;if(c.height!==data.height)c.height=data.height;const x=c.getContext('2d');
+   if(bmp)x.drawImage(bmp,sx,0,data.width,data.height,0,0,data.width,data.height);else x.putImageData(new ImageData(pixels,data.width,data.height),0,0);return c;};
+  canvas=paint(canvas);
   canvas.classList.add('visible');
   $('save-guest-frame').disabled=false;
   if(isBottom){
@@ -8421,7 +8495,7 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
    // Mirror the active bottom output into the large preview; the small LCD
    // below always continues to show the actual guest bottom framebuffer.
    if(topBlank){
-    const big=$('guest-preview');paint(big);
+    const big=paint($('guest-preview'));
     big.classList.add('visible','bottom-mirror');$('empty-screen').style.display='none';
     $('live-screen-name').textContent='BOTTOM LCD MIRROR';
     $('guest-preview-status').textContent='Bottom LCD active · mirrored in main preview · 320×240';
@@ -8491,7 +8565,7 @@ function fallback(){
 }
 try{
  const ids=['cia-code','arm-code','jit-code','wasm-engine-code','compression-code','firmware-code','ncch-crypto-code','loader-code','dsp-code','kernel-code','shader-code','raster-code','wasm-gpu-code','webgl-code','pica-code','scheduler-code','runtime-code','audio-code','ngword-hle-code','controller-code'];
- let poolPre='';const hwPre=!/nohwvs/.test(location.hash)?'globalThis.__HWVS=true;':'';try{if(window.crossOriginIsolated&&typeof SharedArrayBuffer!=='undefined'&&!/nopool/.test(location.hash)&&((navigator.hardwareConcurrency||4)>=4||/forcepool/.test(location.hash))){poolPre='globalThis.__VPOOL_URL='+JSON.stringify(URL.createObjectURL(new Blob([$('shader-code').textContent+'\n'+$('vpool-code').textContent],{type:'text/javascript'})))+';globalThis.VPOOL_CHECK='+(/poolcheck/.test(location.hash)?'true':'false')+';globalThis.__VPOOL_N='+(/forcepool/.test(location.hash)?2:Math.max(1,Math.min(6,(navigator.hardwareConcurrency||4)-2)))+';\n';}}catch(e){}
+ let poolPre='';const hwPre=(!/nohwvs/.test(location.hash)?'globalThis.__HWVS=true;':'')+(/gltiming/.test(location.hash)?'globalThis.__GLTIMING=true;':'');try{if(window.crossOriginIsolated&&typeof SharedArrayBuffer!=='undefined'&&!/nopool/.test(location.hash)&&((navigator.hardwareConcurrency||4)>=4||/forcepool/.test(location.hash))){poolPre='globalThis.__VPOOL_URL='+JSON.stringify(URL.createObjectURL(new Blob([$('shader-code').textContent+'\n'+$('vpool-code').textContent],{type:'text/javascript'})))+';globalThis.VPOOL_CHECK='+(/poolcheck/.test(location.hash)?'true':'false')+';globalThis.__VPOOL_N='+(/forcepool/.test(location.hash)?2:Math.max(1,Math.min(6,(navigator.hardwareConcurrency||4)-2)))+';\n';}}catch(e){}
  const source=hwPre+poolPre+ids.map(id=>$(id).textContent).join('\n')+'\nconst handle=createExecutionController((data,transfer)=>postMessage(data,transfer||[]));onmessage=event=>handle(event.data);postMessage({type:"worker-ready"});';
  workerURL=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));worker=new Worker(workerURL);
  execute=data=>{
@@ -8589,6 +8663,7 @@ $('demo').onclick=()=>{stopMicrophone();gameSelectionNumber++;autoLaunchPending=
 $('fast-clock').addEventListener('change',()=>execute({type:'clock',multiplier:$('fast-clock').checked?4:1}));
 $('speed-limit').addEventListener('change',()=>execute({type:'speed-limit',enabled:$('speed-limit').checked}));
 $('webgl-toggle').addEventListener('change',()=>execute({type:'webgl',enabled:$('webgl-toggle').checked}));
+$('webgpu-toggle').addEventListener('change',async()=>{await WebGPUDisplay.setEnabled($('webgpu-toggle').checked);execute({type:'preview'});});
 // CPU recompiler choice: remembered on this device, applied immediately.
 {const sel=$('cpu-backend');let saved='auto';try{saved=localStorage.getItem('cpu-backend')||'auto';}catch{}
  if(sel){sel.value=['auto','wasm','js'].includes(saved)?saved:'auto';if(sel.value!=='auto')execute({type:'cpu-backend',mode:sel.value});
@@ -8597,8 +8672,8 @@ $('frame-skip').addEventListener('change',()=>execute({type:'frame-skip',enabled
 $('mirror-bottom').addEventListener('change',()=>{mirrorBottomUI=$('mirror-bottom').checked;if(!mirrorBottomUI)topBlank=false;execute({type:'mirror-bottom',enabled:mirrorBottomUI});});
 $('run').onclick=()=>{autoLaunchPending=false;execute({type:'run'});};$('step').onclick=()=>{stopMicrophone();execute({type:'step'});};$('pause').onclick=()=>{stopMicrophone();autoLaunchPending=false;execute({type:'pause'});};
 $('copy-debug').onclick=async()=>{
- const sections=[['Status','status'],['Program','program'],['CPU engine','cpu-engine-status'],['ARM throughput','cpu-throughput'],['GPU','gpu-stats'],['System archives','system-archives-status'],['Recent service totals','service-trace'],['Threads','thread-trace'],['Registers','registers'],['Guest log','log']];
- const message='3DS Execution Lab v0.0331 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
+ const sections=[['Status','status'],['Program','program'],['CPU engine','cpu-engine-status'],['ARM throughput','cpu-throughput'],['GPU','gpu-stats'],['3D backend','webgl-status'],['Display backend','webgpu-status'],['System archives','system-archives-status'],['Recent service totals','service-trace'],['Threads','thread-trace'],['Registers','registers'],['Guest log','log']];
+ const message='3DS Execution Lab v0.0332 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
  try{await navigator.clipboard.writeText(message);$('copy-debug').textContent='Copied!';}catch(e){
   const pad=document.createElement('textarea');pad.value=message;pad.style.cssText='position:fixed;top:20%;left:5%;width:90%;height:40%;z-index:9999;background:#111;color:white';
   document.body.appendChild(pad);pad.select();$('copy-debug').textContent='Select & copy text';

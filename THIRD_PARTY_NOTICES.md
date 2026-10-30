@@ -14,3 +14,9 @@ https://github.com/azahar-emu/azahar/blob/01623d2fb707317410225c0eced82e3e0c84ed
 https://github.com/azahar-emu/azahar/blob/01623d2fb707317410225c0eced82e3e0c84edc1/src/core/hle/service/cam/y2r_u.cpp
 
 Copyright 2015–2024 Citra Emulator Project / Azahar Emulator Project. Licensed under GPL version 2 or any later version; see third_party/Azahar-GPL-2.0.txt. The C++ implementation was adapted to JavaScript and only a subset of Y2R layouts is supported.
+
+The PICA fixed-attribute FIFO and vertex-loader behavior in v0.0332 were independently implemented in JavaScript after comparing Azahar at the same revision:
+https://github.com/azahar-emu/azahar/blob/01623d2fb707317410225c0eced82e3e0c84edc1/src/video_core/pica/pica_core.cpp
+https://github.com/azahar-emu/azahar/blob/01623d2fb707317410225c0eced82e3e0c84edc1/src/video_core/pica/vertex_loader.cpp
+https://github.com/azahar-emu/azahar/blob/01623d2fb707317410225c0eced82e3e0c84edc1/src/video_core/renderer_opengl/gl_rasterizer.cpp
+No Eden implementation code was copied.
