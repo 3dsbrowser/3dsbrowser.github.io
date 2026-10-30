@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0330 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0334 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -215,7 +215,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
 </style></head><body data-view="library" data-sheet="">
 <main class="library" id="library" aria-label="Game library">
  <header class="appbar">
-  <h1>3DBS - v0.0330</h1>
+  <h1>3DBS - v0.0334</h1>
   <button type="button" class="icon" data-open-settings aria-label="Open settings" aria-haspopup="dialog" title="Settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
  </header>
  <section class="lib-section" aria-labelledby="games-title">
@@ -290,7 +290,9 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
   <label class="toggle-row"><span>Real-time speed<small>Keep the game at 3DS speed when the CPU runs faster</small></span><input id="speed-limit" type="checkbox" checked></label>
   <label class="toggle-row"><span>CPU recompiler<small>Auto uses WebAssembly (much faster); JavaScript is the fallback</small></span><select id="cpu-backend" aria-label="CPU recompiler"><option value="auto">Auto</option><option value="wasm">WebAssembly</option><option value="js">JavaScript</option></select></label>
   <label class="toggle-row"><span>GPU rendering (WebGL)<small id="webgl-status">Draw with the graphics card; falls back to software</small></span><input id="webgl-toggle" type="checkbox" checked></label>
+  <label class="toggle-row"><span>WebGPU display (experimental)<small id="webgpu-status">Off · 3D renderer: WebGL2</small></span><input id="webgpu-toggle" type="checkbox"></label>
   <label class="toggle-row"><span>Auto frame skip<small>Only draw the frames that are shown (about 15 per second)</small></span><input id="frame-skip" type="checkbox" checked></label>
+  <label class="toggle-row"><span>Mirror bottom screen when top is blank<small>Turn off to avoid GPU screen-detection checks</small></span><input id="mirror-bottom" type="checkbox" checked></label>
   <div class="menu-info">
    <p><span id="guest-preview-status">Waiting for guest framebuffer.</span></p>
    <p>Screen: <span id="live-screen-name">AUTO DISPLAY</span></p>
@@ -323,7 +325,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0330 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0334 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -342,6 +344,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
     <div id="dsp-stats" class="metric" aria-live="polite">DSP not initialized</div>
     <div id="clock-status" class="metric">Normal 3DS guest timing; this option changes virtual timing, not ARM throughput.</div>
     <small id="host">Preparing local runtime…</small>
+    <div class="settings-row"><button id="copy-debug" type="button" class="outline">Copy debug log</button></div>
    </div></details>
    <details><summary>Telemetry</summary><div class="settings-content">
     <p class="metric" id="gpu-stats">No GPU commands</p>
@@ -356,7 +359,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>CPU registers</summary><div class="settings-content"><pre id="registers">No CPU state.</pre></div></details>
    <details><summary>Graphics diagnostics</summary><div class="settings-content">
     <p class="hint" style="margin-top:0">Synthetic framebuffer test; these are not actual game frames.</p>
-    <div class="settings-row"><button id="gpu-test" type="button" class="outline">Test framebuffer</button><button id="export-sources" type="button" class="ghost">Export core JS</button><button id="copy-debug" type="button" class="ghost">Copy debug log</button></div>
+    <div class="settings-row"><button id="gpu-test" type="button" class="outline">Test framebuffer</button><button id="export-sources" type="button" class="ghost">Export core JS</button></div>
     <p id="gpu-test-status" class="metric">Diagnostic not run.</p>
     <div class="diagnostics-screens"><div><small>Top LCD · synthetic</small><canvas class="diag-screen" id="screen-top" width="400" height="240"></canvas></div><div><small>Bottom LCD · synthetic</small><canvas class="diag-screen" id="screen-bottom" width="320" height="240"></canvas></div></div>
    </div></details>
@@ -524,7 +527,7 @@ class Memory{
  protect(base,size,permissions){this._mapGen=(this._mapGen|0)+1;base=U(base);this._range(base,size);if(!/^(|r|rw|rx|rwx)$/.test(permissions))throw Error('Unsupported memory permissions');for(let a=base;a<base+size;a+=4096)if(!this.pages.has(a>>>0))throw Error('Protection of unmapped memory');for(let a=base;a<base+size;a+=4096)this.pages.get(a>>>0).permissions=permissions;this.epoch++;this.mappingVersion++;if(this._jitTables)globalThis.JitARM?.syncRange(this,base,size);return this;}
  alias(dest,source,size,permissions='rw'){this._mapGen=(this._mapGen|0)+1;dest=U(dest);source=U(source);this._range(dest,size);this._range(source,size);for(let i=0;i<size;i+=4096){if(this.pages.has(U(dest+i))||!this.pages.has(U(source+i)))throw Error('Invalid alias mapping');}for(let i=0;i<size;i+=4096)this.pages.set(U(dest+i),{data:this.pages.get(U(source+i)).data,permissions,state:9});this.epoch++;this.mappingVersion++;if(this._jitTables)globalThis.JitARM?.syncRange(this,dest,size);return this;}
  isFree(base,size){if(base%4096||size%4096||!size||base+size>0x100000000)return false;for(let a=base;a<base+size;a+=4096)if(this.pages.has(a>>>0))return false;return true;}
- query(address){address=U(address);const base=address&~4095,page=this.pages.get(base);const perms=page?page.permissions:'',state=page?page.state:0;let lo=base,hi=base+4096;if(page){while(lo>=4096){const n=this.pages.get(U(lo-4096));if(!n||n.permissions!==perms||n.state!==state)break;lo-=4096;}while(hi<0x100000000){const n=this.pages.get(U(hi));if(!n||n.permissions!==perms||n.state!==state)break;hi+=4096;}}else{for(const [addr] of this.pages){if(addr<lo)lo=Math.max(lo,addr+4096);if(addr>=hi)hi=Math.min(hi,addr);}}return {base:U(lo),size:hi-lo,permissions:perms,state};}
+ query(address){address=U(address);const base=(address&~4095)>>>0,page=this.pages.get(base);const perms=page?page.permissions:'',state=page?page.state:0;let lo=page?base:0,hi=page?base+4096:0x100000000;if(page){while(lo>=4096){const n=this.pages.get(U(lo-4096));if(!n||n.permissions!==perms||n.state!==state)break;lo-=4096;}while(hi<0x100000000){const n=this.pages.get(U(hi));if(!n||n.permissions!==perms||n.state!==state)break;hi+=4096;}}else{for(const [addr] of this.pages){if(addr<base)lo=Math.max(lo,addr+4096);else if(addr>base)hi=Math.min(hi,addr);}}return {base:U(lo),size:hi-lo,permissions:perms,state};}
 
  _at(a,perm){a=U(a);let p=this.pages.get((a&~4095)>>>0);if(!p)throw Error('Unmapped memory at 0x'+a.toString(16));if(perm&&!p.permissions.includes(perm))throw Error('Memory '+perm+' permission fault at 0x'+a.toString(16));return [p.data,a&4095];}
  _align(a,n){if(a%n)throw Error('Unaligned '+n+'-byte access at 0x'+U(a).toString(16));}
@@ -3348,6 +3351,8 @@ class Kernel{
   // Bounded service-command histogram helps distinguish actual startup work
   // from repeated polling. Values are diagnostics only; they change no IPC.
   const tag=name+':0x'+head.toString(16).padStart(8,'0');
+  // Retain a short chronological trace to diagnose faults without recording file data.
+  this.recentIpc??=[];this.recentIpc.push(tag);if(this.recentIpc.length>16)this.recentIpc.shift();
   if(this.ipcCommands.has(tag)||this.ipcCommands.size<512)
    this.ipcCommands.set(tag,(this.ipcCommands.get(tag)||0)+1);
   if(name==='srv:'){
@@ -3391,6 +3396,9 @@ class Kernel{
    if(head===0x00090000)return value(0);   // GetPedometerState: not counting
    if(head===0x000c0000)return value(0);   // GetTotalStepCount
    if(head===0x000e0000)return value(0);   // GetPedometerRecordingMode
+   // ConfigureNew3DSCPU: accept the request without changing the emulated clock.
+   // Protocol behavior adapted from Panda3DS PTMService; see THIRD_PARTY_NOTICES.md.
+   if(head===0x08180040){mem.write32(cmdAt,reply(cmd,1));mem.write32(cmdAt+4,0);return;}
    if(head===0x000b00c2||head===0x000f0084){ // GetStepHistory / GetStepHistoryAll: no steps
     const words=head===0x000b00c2?[mem.read32(cmdAt+16),mem.read32(cmdAt+20)]:[mem.read32(cmdAt+20),mem.read32(cmdAt+24)];
     const size=words[0]>>>4,ptr=words[1];if(size>0x100000)throw Error('ptm:u step history buffer too large');
@@ -3404,6 +3412,42 @@ class Kernel{
     let msg='';if(type===4||type===5)for(let i=0;i<0x60;i++){const c=mem.read8(cmdAt+0x24+i);if(!c)break;msg+=String.fromCharCode(c);}
     const kinds=['generic','system memory corrupted','card removed','exception','result failure','logged'];
     throw Error('Game reported a fatal error ('+(kinds[type]||'type '+type)+'): result 0x'+result.toString(16).padStart(8,'0')+' at 0x'+pc.toString(16)+(msg?' — '+msg:''));}
+   return this.stubReply(name,head,cmdAt,cmd);
+  }
+  if(name==='y2r:u'){
+   // Y2R planar 8-bit conversion, adapted from Azahar/Citra (GPL-2.0-or-later).
+   // See THIRD_PARTY_NOTICES.md for source and license details.
+   const y=this.y2r??={input:0,output:0,rotation:0,alignment:0,width:0,height:0,alpha:255,coef:0,interrupt:false,buffers:{}};
+   const ok=()=>{mem.write32(cmdAt,reply(cmd,1));mem.write32(cmdAt+4,0);};
+   const value=v=>{mem.write32(cmdAt,reply(cmd,2));mem.write32(cmdAt+4,0);mem.write32(cmdAt+8,v>>>0);};
+   const setters={0x00010040:'input',0x00030040:'output',0x00050040:'rotation',0x00070040:'alignment',0x00220040:'alpha',0x000d0040:'interrupt',0x00200040:'coef',0x001a0040:'width',0x001c0040:'height'};
+   if(setters[head]){y[setters[head]]=mem.read32(cmdAt+4);return ok();}
+   const buffers={0x00100102:'Y',0x00110102:'U',0x00120102:'V',0x00130102:'YUV',0x00180102:'dst'};
+   if(buffers[head]){y.buffers[buffers[head]]={addr:mem.read32(cmdAt+4),size:mem.read32(cmdAt+8),unit:mem.read32(cmdAt+12)&65535,gap:mem.read32(cmdAt+16)&65535};return ok();}
+   if(head===0x000f0000){this.y2rEvent??={type:'event',signaled:false,reset:0};
+    const handle=this.createHandle(this.y2rEvent);mem.write32(cmdAt,reply(cmd,1,2));mem.write32(cmdAt+4,0);mem.write32(cmdAt+8,0);mem.write32(cmdAt+12,handle);return;}
+   if(head===0x00280000)return value(0);
+   if(head===0x00260000){
+    const w=y.width,h=y.height,B=y.buffers,bpp=[4,3,2,2][y.output];
+    if(!w||w>1024||(w&7)||!h||h>1024||y.input>1||!bpp||y.rotation!==0||y.alignment>1||(y.input===1&&(h&1))||(y.alignment===1&&(h&7))||y.coef>3)
+     throw Error('Y2R unsupported conversion: input='+y.input+' output='+y.output+' rotation='+y.rotation+' alignment='+y.alignment+' size='+w+'x'+h);
+    const read=(buf,n)=>{if(!buf||!buf.unit||buf.size<n)throw Error('Y2R invalid input buffer');const out=new Uint8Array(n);
+     const extent=n+Math.floor((n-1)/buf.unit)*buf.gap;if(buf.addr+extent>0x100000000)throw Error('Y2R input range overflow');const glx=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;glx?.flushRange(mem,buf.addr,extent);
+     for(let i=0;i<n;i++)out[i]=mem.read8((buf.addr+i+Math.floor(i/buf.unit)*buf.gap)>>>0);return out;};
+    const Y=read(B.Y,w*h),chroma=w*h/(y.input===1?4:2),U8=read(B.U,chroma),V8=read(B.V,chroma),dst=B.dst,n=w*h*bpp;
+    if(!dst||!dst.unit||dst.unit%bpp||dst.size<n)throw Error('Y2R invalid output buffer');
+    const extent=n+Math.floor((n-1)/dst.unit)*dst.gap;if(dst.addr+extent>0x100000000)throw Error('Y2R output range overflow');const glx=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;glx?.invalidateRange(mem,dst.addr,extent);
+    const C=[[256,358,182,88,453,-5743,4334,-7259],[256,403,119,47,475,-6451,2684,-7505],[298,408,208,100,516,-7134,4338,-8859],[298,458,136,54,540,-7940,2460,-9249]][y.coef];
+    const clamp=v=>Math.max(0,Math.min(255,v));const px=new Uint8Array(n);
+    for(let row=0;row<h;row++)for(let col=0;col<w;col++){const q=row*w+col,ch=(y.input===1?((row>>1)*w+col)>>1:q>>1),yy=C[0]*Y[q],u=U8[ch],v=V8[ch];
+     const r=clamp((((yy+C[1]*v)>>3)+C[5]+24)>>5),g=clamp((((yy-C[2]*v-C[3]*u)>>3)+C[6]+24)>>5),b=clamp((((yy+C[4]*u)>>3)+C[7]+24)>>5);
+     const pos=y.alignment===0?q:((row>>3)*(w>>3)+(col>>3))*64+((col&1)|((row&1)<<1)|((col&2)<<1)|((row&2)<<2)|((col&4)<<2)|((row&4)<<3));const j=pos*bpp,alpha=y.alpha&255;
+     if(y.output===0){px[j]=alpha;px[j+1]=b;px[j+2]=g;px[j+3]=r;}else if(y.output===1){px[j]=b;px[j+1]=g;px[j+2]=r;}else{const z=y.output===2?((r>>3)<<11)|((g>>3)<<6)|((b>>3)<<1)|(alpha>>7):((r>>3)<<11)|((g>>2)<<5)|(b>>3);px[j]=z&255;px[j+1]=z>>>8;}}
+    for(let i=0;i<n;i++)mem.write8((dst.addr+i+Math.floor(i/dst.unit)*dst.gap)>>>0,px[i]);
+    if(y.interrupt&&this.y2rEvent){this.y2rEvent.signaled=true;this.scheduler?.wakeObject(this.y2rEvent);}
+    return ok();
+   }
+   if(head===0x002b0000||head===0x002c0000||head===0x00270000)return ok();
    return this.stubReply(name,head,cmdAt,cmd);
   }
   if(Kernel.STUB_SERVICES.has(name))return this.stubReply(name,head,cmdAt,cmd);
@@ -4431,7 +4475,7 @@ class Kernel{
    }
    if(id===0){ // DMA: guest address-space byte copy.
     const [src,dst,length]=[w[1],w[2],w[3]];
-    check(src,length,'r');check(dst,length,'w');const GLX=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;GLX?.flushRange(mem,src,length);GLX?.invalidateRange(mem,dst,length);
+    check(src,length,'r');check(dst,length,'w');const GLX=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;GLX?.flushRange(mem,src,length);GLX?.invalidateRange(mem,dst,length,true);
     // Source and destination spans have been fully permission-checked above.
     // Snapshot before writing, preserving DMA semantics for overlapping ranges.
     // Cache each guest page instead of doing one Map lookup and permission
@@ -4677,8 +4721,12 @@ class Kernel{
   case 0x0b:{const t=this.getHandle(r[1]);return this.result(r,t?.type==='thread'?0:ERR,t?.type==='thread'?t.priority:0);}
   case 0x0c:{const t=this.getHandle(r[0]);if(!t||t.type!=='thread'||r[1]>63)return this.result(r,ERR);t.priority=r[1];return this.result(r);}
   case 0x11:r[0]=0;return;
-  case 0x13:return this.result(r,0,this.createHandle({type:'mutex',locked:!!r[1],owner:r[1]?this.currentThread:null}));
-  case 0x14:{const h=this.getHandle(r[0]);if(!h||h.type!=='mutex')return this.result(r,ERR);h.locked=false;h.owner=null;this.scheduler?.wakeObject(h);return this.result(r);}
+  case 0x13:{const held=!!r[1],mutex={type:'mutex',locked:held,owner:held?this.currentThread:null,lockCount:held?1:0};
+   if(held)(this.currentThread.heldMutexes??=new Set()).add(mutex);
+   return this.result(r,0,this.createHandle(mutex));}
+  case 0x14:{const h=this.getHandle(r[0]);if(!h||h.type!=='mutex'||!h.locked||h.owner!==this.currentThread)return this.result(r,ERR);
+   if(--h.lockCount===0){this.currentThread.heldMutexes?.delete(h);h.locked=false;h.owner=null;this.scheduler?.wakeObject(h);}
+   return this.result(r);}
   case 0x15:{const initial=r[1]|0,max=r[2]|0;if(initial<0||max<=0||initial>max)return this.result(r,ERR);return this.result(r,0,this.createHandle({type:'semaphore',count:initial,max}));}
   case 0x16:{const h=this.getHandle(r[1]),amount=r[2]|0;if(!h||h.type!=='semaphore'||amount<1||h.count+amount>h.max)return this.result(r,ERR);const old=h.count;h.count+=amount;this.scheduler?.wakeObject(h,{all:true});return this.result(r,0,old);}
   case 0x17:return this.result(r,0,this.createHandle({type:'event',signaled:false,reset:r[1]}));
@@ -4721,7 +4769,7 @@ class Kernel{
   case 0x23:{const h=r[0];if(!this.handles.delete(h))return this.result(r,ERR);return this.result(r);}
   case 0x24:{const obj=this.getHandle(r[0]);if(!obj)return this.result(r,ERR);
    if(obj.type==='event'&&obj.signaled){if(obj.reset===0)obj.signaled=false;return this.result(r);}
-   if(obj.type==='mutex'&&!obj.locked){obj.locked=true;obj.owner=this.currentThread;return this.result(r);}
+   if(obj.type==='mutex'&&(!obj.locked||obj.owner===this.currentThread)){this.scheduler.acquire(obj,this.currentThread);return this.result(r);}
    if(obj.type==='semaphore'&&obj.count>0){obj.count--;return this.result(r);}
    if(obj.type==='thread'&&obj.state==='exited')return this.result(r);
    if(!['event','mutex','semaphore','thread'].includes(obj.type))return this.result(r,ERR);
@@ -4735,7 +4783,7 @@ class Kernel{
    if(waitAll){
     if(this.scheduler.acquireAll(objs,this.currentThread)){r[1]=0xffffffff;return this.result(r);}
    }else{
-    const index=objs.findIndex(obj=>this.scheduler.isSignaled(obj));
+    const index=objs.findIndex(obj=>this.scheduler.isSignaled(obj,this.currentThread));
     if(index>=0){this.scheduler.acquire(objs[index],this.currentThread);r[1]=index;return this.result(r);}
    }
    const ns=BigInt.asIntN(64,(BigInt(r[5])<<32n)|BigInt(r[4]));if(ns===0n)return this.result(r,0x09401bfe);
@@ -4770,11 +4818,12 @@ class Kernel{
   }
   case 0x35:{const h=this.getHandle(r[1]);return this.result(r,h?.type==='process'?0:ERR,h?.type==='process'?h.id:0);}
   case 0x37:{const h=this.getHandle(r[1]);return this.result(r,h?.type==='thread'?0:ERR,h?.type==='thread'?h.id:0);}
+  case 0x3c:{const reason=r[0]>>>0,kind=['PANIC','ASSERT','USER'][reason]||('reason '+reason);throw Error('Guest called svcBreak ('+kind+') at 0x'+cpu.pc.toString(16)+'; LR=0x'+(r[14]>>>0).toString(16));}
   case 0x3d:{const length=r[1];if(length>65536)throw Error('Debug string exceeds limit');const bytes=new Uint8Array(length);for(let i=0;i<length;i++)bytes[i]=this.memory.read8(U(r[0]+i));this.log(new TextDecoder().decode(bytes));return this.result(r);}
   default:throw Error('Unimplemented 3DS SVC 0x'+n.toString(16)+' at 0x'+cpu.pc.toString(16));
   }
  }
- statistics(){return {kernelCalls:Array.from(this.calls.entries()).map(([id,count])=>({id:'0x'+id.toString(16),count})),handleCount:this.handles.size,guestPages:this.memory.pages.size,serviceRequests:this.serviceRequests,gspTransfers:{dmaBytes:this.gsp?.dmaBytes||0,memoryFillBytes:this.gsp?.memoryFillBytes||0,displayTransfers:this.gsp?.displayTransfers||0,framebufferUpdates:this.gsp?.framebufferUpdates||0,vramSaves:this.gsp?.vramSaves||0,vramRestores:this.gsp?.vramRestores||0},topIpcCommands:[...this.ipcCommands.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([command,count])=>({command,count})),dsp:this.dsp.stats(),dspFirmwareMounted:!!this.dspFirmwareInfo,missingSystemTitles:[...(this.missingSystemTitles||[])],providedSystemTitles:[...this.systemArchives.keys()],threads:this.scheduler?.statistics()||null,hid:this.hid?{buttons:this.hid.buttons,frames:this.hid.frames,hostMessages:this.hid.hostMessages,queued:this.hostInputQueue?.length||0,pressSamples:this.hid.sampledPresses,touchSamples:this.hid.sampledTouches,touch:this.hid.touch}:null};}
+ statistics(){return {kernelCalls:Array.from(this.calls.entries()).map(([id,count])=>({id:'0x'+id.toString(16),count})),handleCount:this.handles.size,guestPages:this.memory.pages.size,serviceRequests:this.serviceRequests,gspTransfers:{dmaBytes:this.gsp?.dmaBytes||0,memoryFillBytes:this.gsp?.memoryFillBytes||0,displayTransfers:this.gsp?.displayTransfers||0,framebufferUpdates:this.gsp?.framebufferUpdates||0,vramSaves:this.gsp?.vramSaves||0,vramRestores:this.gsp?.vramRestores||0},topIpcCommands:[...this.ipcCommands.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([command,count])=>({command,count})),recentIpc:(this.recentIpc||[]).slice(),dsp:this.dsp.stats(),dspFirmwareMounted:!!this.dspFirmwareInfo,missingSystemTitles:[...(this.missingSystemTitles||[])],providedSystemTitles:[...this.systemArchives.keys()],threads:this.scheduler?.statistics()||null,hid:this.hid?{buttons:this.hid.buttons,frames:this.hid.frames,hostMessages:this.hid.hostMessages,queued:this.hostInputQueue?.length||0,pressSamples:this.hid.sampledPresses,touchSamples:this.hid.sampledTouches,touch:this.hid.touch}:null};}
 }
 return {Kernel,romfsLevel3};
 });
@@ -6314,7 +6363,7 @@ function init(){
   gl=canvas.getContext('webgl2',{antialias:false,depth:false,stencil:false,alpha:true,premultipliedAlpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});
   if(!gl){failed='WebGL2 unavailable';return false;}
   // Per-call timing of GL entry points, shown in the HUD (which call blocks the emulator?)
-  {const T=stats.glT=stats.glT||{};const proto=Object.getPrototypeOf(gl);for(const n of Object.getOwnPropertyNames(proto)){let f;try{f=gl[n];}catch(e){continue;}if(typeof f!=='function'||n==='getExtension'||n==='getContextAttributes'||n==='isContextLost')continue;
+  if(globalThis.__GLTIMING){const T=stats.glT=stats.glT||{};const proto=Object.getPrototypeOf(gl);for(const n of Object.getOwnPropertyNames(proto)){let f;try{f=gl[n];}catch(e){continue;}if(typeof f!=='function'||n==='getExtension'||n==='getContextAttributes'||n==='isContextLost')continue;
    gl[n]=function(){const t=performance.now();const r=f.apply(gl,arguments);T[n]=(T[n]||0)+performance.now()-t;T['#'+n]=(T['#'+n]|0)+1;return r;};}}
   vao=gl.createVertexArray();gl.bindVertexArray(vao);
   vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
@@ -6338,13 +6387,16 @@ function pageWrite(m,addr,src,len){
   if(!p||!p.permissions.includes('w'))throw Error('WebGL readback target not writable at 0x'+a.toString(16));
   const o=a&4095,n=Math.min(len-i,4096-o);p.data.set(src.subarray(i,i+n),o);i+=n;}
  m.epoch++;}
-function sameAsPages(m,addr,len,raw,step=1){
- if((addr&3)||(len&3)||(raw.byteOffset&3))return false;
- const r32=new Uint32Array(raw.buffer,raw.byteOffset,len>>2);
+function sameAsPages(m,addr,len,raw){
+ // Compare every byte, including unaligned and short texture formats.
+ if(raw.length<len)return false;
  for(let i=0;i<len;){const a=(addr+i)>>>0,p=m.pages.get((a&~4095)>>>0);if(!p||!p.permissions.includes('r'))return false;
-  const o=a&4095,n=Math.min(len-i,4096-o),d=p.data;if((d.byteOffset+o)&3)return false;
-  const v=new Uint32Array(d.buffer,d.byteOffset+o,n>>2),k0=i>>2;
-  for(let k=0;k<v.length;k+=step)if(v[k]!==r32[k0+k])return false;
+  const o=a&4095,n=Math.min(len-i,4096-o),d=p.data;let k=0;
+  if(!((d.byteOffset+o)&3)&&!((raw.byteOffset+i)&3)){
+   const count=n>>>2,v=new Uint32Array(d.buffer,d.byteOffset+o,count),r=new Uint32Array(raw.buffer,raw.byteOffset+i,count);
+   for(let j=0;j<count;j++)if(v[j]!==r[j])return false;k=count*4;
+  }
+  for(;k<n;k++)if(d[o+k]!==raw[i+k])return false;
   i+=n;}
  return true;}
 const overlaps=(a0,l0,a1,l1)=>a0<a1+l1&&a1<a0+l0;
@@ -6436,14 +6488,21 @@ function readback(rt){gcReset();if(stats.rbTrace){const k=(new Error().stack||''
 function flushRange(m,addr,len){if(!gl)return;for(const rt of rts.values())if(rt.gpuDirty&&rt.mem===m&&overlaps(rt.addr,rt.len,addr>>>0,len))readback(rt);
  for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,addr>>>0,len))materialize(l);}
 // Something is about to write [addr,addr+len): keep GPU-only pixels, then let memory win.
-function invalidateRange(m,addr,len){if(!gl)return;for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,addr>>>0,len))materialize(l);for(const rt of rts.values())if(rt.mem===m&&overlaps(rt.addr,rt.len,addr>>>0,len)){if(rt.gpuDirty)readback(rt);rt.memStale=true;}
- for(const [k,t] of textures)if(t.mem===m&&overlaps(t.base,t.len,addr>>>0,len))t.checked=-1,t.vf=-1e9;}
+function invalidateRange(m,addr,len,wholeOverwrite=false){if(!gl)return;addr>>>=0;
+ // A proven contiguous overwrite of the entire target makes its old GPU data
+ // irrelevant. Partial/strided writes must preserve the untouched bytes.
+ const covered=(base,size)=>wholeOverwrite&&addr<=base&&addr+len>=base+size;
+ for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,addr,len)){
+  if(covered(l.dst,l.len)){l.pending=false;stats.discardedReadbacks=(stats.discardedReadbacks|0)+1;}else materialize(l);}
+ for(const rt of rts.values())if(rt.mem===m&&overlaps(rt.addr,rt.len,addr,len)){
+  if(rt.gpuDirty){if(covered(rt.addr,rt.len)){rt.gpuDirty=false;stats.discardedReadbacks=(stats.discardedReadbacks|0)+1;}else readback(rt);}rt.memStale=true;}
+ for(const [k,t] of textures)if(t.mem===m&&overlaps(t.base,t.len,addr,len))t.checked=-1,t.vf=-1e9;}
 // GX MemoryFill about to write [base,end) with a repeated value. A 32-bit fill
 // that covers a whole GPU-held target is mirrored with glClear (bytes A,B,G,R
 // per pixel in memory -> clear colour R,G,B,A), so the target stays valid on
 // both sides and no re-upload is needed; anything else falls back to invalidate.
 function fill(m,base,end,value,width){if(!gl)return;gcReset();base>>>=0;end>>>=0;
- for(const d of depthBufs.values()){if(d.mem!==m||base>d.addr||end<d.addr+d.len)continue;const mask=d.bytes===2?0xffff:0xffffff;d.pendingClear=((value>>>0)&mask)/mask;d.clearPending=true;}for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,base,end-base))materialize(l);
+ for(const d of depthBufs.values()){if(d.mem!==m||base>d.addr||end<d.addr+d.len)continue;const mask=d.bytes===2?0xffff:0xffffff;d.pendingClear=((value>>>0)&mask)/mask;d.clearPending=true;}for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,base,end-base)){if(base<=l.dst&&end>=l.dst+l.len){l.pending=false;stats.discardedReadbacks=(stats.discardedReadbacks|0)+1;}else materialize(l);}
  for(const rt of rts.values()){if(rt.mem!==m||!overlaps(rt.addr,rt.len,base,end-base))continue;
   const fw=[4,3,2,2,2][rt.fmt];
   if(width===fw&&base<=rt.addr&&end>=rt.addr+rt.len&&((rt.addr-base)%fw)===0){
@@ -6494,7 +6553,7 @@ function displayTransfer(m,src,dst,sw,sh,dw,dh,srcFmt,dstFmt,flags){gcReset();
 // the GPU). Screen i occupies x = i*256, rows 0..h-1 of the bitmap, with image
 // row y = LCD memory row y (the same layout decodeFramebuffer produces).
 // list: [{addr,w,h,fmt,stride}] -> {bitmap,shown:[bool]} or null.
-function present(m,list){gcReset();
+function present(m,list,detectTop=true){gcReset();
  if(!gl||!enabled)return null;const c=gl.canvas;if(!c||typeof c.transferToImageBitmap!=='function')return null;
  const W=512,H=512;let any=false;const shown=[];
  for(let i=0;i<list.length;i++){const q=list[i],l=lcds.get(q.addr>>>0);
@@ -6506,7 +6565,7 @@ function present(m,list){gcReset();
   if(l.flip)gl.blitFramebuffer(0,0,w,h,x,H-h,x+w,H,gl.COLOR_BUFFER_BIT,gl.NEAREST);
   else gl.blitFramebuffer(0,0,w,h,x,H,x+w,H-h,gl.COLOR_BUFFER_BIT,gl.NEAREST);}
  if(!any)return null;
- const topLit=litProbe(list[0],shown[0]);
+ const topLit=detectTop?litProbe(list[0],shown[0]):true;
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
  gl.colorMask(false,false,false,true);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.colorMask(true,true,true,true);
  stats.presents=(stats.presents|0)+1;
@@ -6531,7 +6590,7 @@ function litProbe(q,shownTop){gcReset();
    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,l.fbo);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,LIT.fbo);
    gl.blitFramebuffer(0,0,l.w,l.h,0,0,24,40,gl.COLOR_BUFFER_BIT,gl.NEAREST);
    gl.bindFramebuffer(gl.FRAMEBUFFER,LIT.fbo);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,LIT.pbo);
-   gl.readPixels(0,0,24,40,gl.RGBA,gl.UNSIGNED_BYTE,0);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
+   gl.readPixels(0,0,24,40,gl.RGBA,gl.UNSIGNED_BYTE,0);stats.litReads=(stats.litReads|0)+1;gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
    LIT.sync=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);gl.flush();}
  }catch(e){}
  return LIT.value;}
@@ -6575,9 +6634,10 @@ function texFor_(m,g,avoidAddr,avoidLen,u=0){
  // Every 30 frames the bytes are compared anyway (safety net).
  const other=m.epoch-(m._cpuW|0)-(m._nonWrite|0)-(m._rangedW|0),ww=m._watchW|0,mg=m._mapGen|0;
  if(!trackOff&&t&&t.mem===m&&t.raw.length===len&&t.vo===other&&t.vw===ww&&t.vm===mg&&frameNo-t.vf<30){stats.texFast=(stats.texFast|0)+1;return t;}
- // Full byte compare at most every 100 ms per texture; in between a 1-in-16 word sample (cheap) must still match.
- if(t&&t.mem===m&&t.raw.length===len){const now=performance.now(),quick=now-(t.fullT||0)<100;
-  if(sameAsPages(m,base,len,t.raw,quick?16:1)){if(!quick)t.fullT=now;stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
+ // After a possible write, every byte must match before a cached texture can be reused.
+ // Sampling misses changes between sampled words and can leave corrupted graphics.
+ if(t&&t.mem===m&&t.raw.length===len){
+  if(sameAsPages(m,base,len,t.raw)){t.fullT=performance.now();stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
  const raw=pageCopy(m,base,len,new Uint8Array(len));if(!raw)return tn('pages');gcReset();
  if(!t){t={key,mem:m,base,len,w,h,type,tex:gl.createTexture(),raw:null};textures.set(key,t);
   gl.bindTexture(gl.TEXTURE_2D,t.tex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,w,h);
@@ -6695,10 +6755,10 @@ function tevGLSL(g,light){
  const comb=(mode,a,b,c)=>{switch(mode){case 0:return a;case 1:return '('+a+'*'+b+'/255.0)';case 2:return '('+a+'+'+b+')';
   case 3:return '('+a+'+'+b+'-128.0)';case 4:return '(('+a+'*'+c+'+'+b+'*(255.0-'+c+'))/255.0)';case 5:return '('+a+'-'+b+')';
   case 8:return '('+a+'*'+b+'/255.0+'+c+')';case 9:return '(min('+a+'+'+b+',255.0)*'+c+'/255.0)';default:return a;}};
- let code='vec4 prev=prim;vec4 pbuf=vec4(0.0),nbuf=vec4('+lit(bc&255)+','+lit((bc>>>8)&255)+','+lit((bc>>>16)&255)+','+lit(bc>>>24)+');';
+ let code='vec4 prev=prim;vec4 pbuf=vec4(0.0),nbuf=uBuf;';
  for(const s of live){const k=s.k,c=s.constant;
   if(!s.pass){
-   code+='{const vec4 C'+k+'=vec4('+lit(c&255)+','+lit((c>>>8)&255)+','+lit((c>>>16)&255)+','+lit(c>>>24)+');';
+   code+='{vec4 C'+k+'=uC'+k+';';
    const r=[0,1,2].map(j=>srcExpr((s.src>>>(4*j))&15,k)),a=[0,1,2].map(j=>srcExpr((s.src>>>(16+4*j))&15,k));
    const ro=[s.operand&15,(s.operand>>>4)&15,(s.operand>>>8)&15],ao=[(s.operand>>>12)&7,(s.operand>>>16)&7,(s.operand>>>20)&7];
    const rm=s.comb&15,am=(s.comb>>>16)&15,rs=1<<Math.min(2,s.scale&3),as=1<<Math.min(2,(s.scale>>>16)&3);
@@ -6714,7 +6774,7 @@ function tevGLSL(g,light){
   if(k<4){code+='pbuf=nbuf;';if(updRGB&(1<<k))code+='nbuf.rgb=prev.rgb;';if(updA&(1<<k))code+='nbuf.a=prev.a;';}}
  return code+'vec4 res=prev;';}
 function alphaGLSL(g){const at=g.regs[0x104]>>>0;if(!(at&1))return '';
- const ref=lit((at>>>8)&255),fn=(at>>>4)&7;
+ const ref='uAlphaRef',fn=(at>>>4)&7;
  const cond=[ 'false','true','res.a=='+ref,'res.a!='+ref,'res.a<'+ref,'res.a<='+ref,'res.a>'+ref,'res.a>='+ref][fn];
  return 'if(!('+cond+'))discard;';}
 function fragmentSource(g,light){
@@ -6725,6 +6785,7 @@ function fragmentSource(g,light){
 precision highp float;precision highp int;precision highp sampler2D;
 in vec4 vCol;in vec2 vUV;in vec2 vUV1;in vec2 vUV2;in vec4 vNQ;in vec3 vView;out vec4 oCol;
 uniform sampler2D uTex;uniform sampler2D uTex1;uniform sampler2D uTex2;uniform sampler2D uLut;
+uniform vec4 uC0,uC1,uC2,uC3,uC4,uC5,uBuf;uniform float uAlphaRef;
 uniform ivec2 uSize;uniform ivec2 uWrap;uniform vec4 uBorder;
 uniform ivec2 uSize1;uniform ivec2 uWrap1;uniform vec4 uBorder1;
 uniform ivec2 uSize2;uniform ivec2 uWrap2;uniform vec4 uBorder2;
@@ -6754,7 +6815,6 @@ void main(){
  ${light?lightingGLSL(light):''}
  ${tevGLSL(g,light)}
  ${alphaGLSL(g)}
- if(res.a==0.0)discard;
  oCol=res/255.0;
 }`;}
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
@@ -6868,7 +6928,7 @@ function picaToGlsl(code, descs, entry){
 // ---------------------------------------------------------------- GPU-side vertex shading (#hwvs)
 // The PICA vertex shader is translated to GLSL once per program; vertex attributes are uploaded as raw guest bytes and
 // fetched by the GPU (vertexAttribPointer does the byte/short/float decoding). No per-vertex JavaScript.
-const HW={uses:new Map(),pend:new Set(),PROMOTE:8,MAXPEND:1,on:!!globalThis.__HWVS,bad:new Set(),gen:new Map(),vso:new Map(),lastVer:-1,lastKey:'',lastEntry:-1,lastCode:null,ready:false,en:0,
+const HW={uses:new Map(),pend:new Set(),PROMOTE:8,MAXPEND:1,nextCompile:0,on:!!globalThis.__HWVS,bad:new Set(),gen:new Map(),vso:new Map(),lastVer:-1,lastKey:'',lastEntry:-1,lastCode:null,ready:false,en:0,
  buf:new Uint8Array(1<<16),i16:new Uint16Array(3*4096),iv:new Int32Array(16),sem:new Int8Array(24)};
 const HW_HEAD=`#version 300 es
 precision highp float;precision highp int;
@@ -6915,12 +6975,11 @@ function hwPrep(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
   for(let field=0;field<num&&field<12;field++){
    const at=field<8?(cA>>>(field*4))&15:(cB>>>((field-8)*4))&15;
    if(at>=12){cursor=(cursor+3)&~3;cursor+=(at-11)*4;continue;}
-   if(at>=count||(fixed&(1<<at)))continue;
    const nib=at<8?(R[0x201]>>>(at*4))&15:(R[0x202]>>>((at-8)*4))&15,type=nib&3,comps=((nib>>>2)&3)+1,eb=[1,1,2,4][type];
    cursor=(cursor+eb-1)&~(eb-1);
    const perm=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;
    if(stride%eb||cursor%eb)return null;
-   fields.push({bi:blocks.length,off:cursor,type,comps,perm});used=true;cursor+=comps*eb;}
+   if(at<count&&!(fixed&(1<<at))){fields.push({bi:blocks.length,off:cursor,type,comps,perm});used=true;}cursor+=comps*eb;}
   if(used)blocks.push({phys,stride});}
  if(!fields.length)return null;
  let mn=0x7fffffff,mx=-1;for(let i=0;i<N;i++){const v=idx[i];if(v<mn)mn=v;if(v>mx)mx=v;}
@@ -6942,7 +7001,7 @@ let hwVsObjs=new Map();
 function hwVso(D){let o=hwVsObjs.get(D.vkey);if(!o){o=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(o,hwVsSource(D.gen,D.sem));gl.compileShader(o);if(hwVsObjs.size>96)hwVsObjs=new Map();hwVsObjs.set(D.vkey,o);}return o;}
 function hwUniforms(p){const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);p.hw={uC:U('uC'),uI:U('uI'),uBools:U('uBools'),uClip:U('uClip'),uZ:U('uZ'),uver:-1,sh:null,iv:new Int32Array(16),bm:-1,clip:'',z:''};}
 const HW_GLT=()=>[gl.BYTE,gl.UNSIGNED_BYTE,gl.SHORT,gl.FLOAT];
-const hwF=new Float32Array(384);
+const hwF=new Float32Array(384),hwFixed=Array.from({length:16},()=>[0,0,0,1]),hwFixedCache=new Float64Array(64).fill(NaN);
 function hwDraw(g,p,D,shader){
  if(!HW.ready)hwInit();const H=p.hw;
  // shader uniforms: re-sent only when the guest wrote one
@@ -6968,6 +7027,9 @@ function hwDraw(g,p,D,shader){
   if(pk[q]!==f.comps||pk[q+1]!==f.type||pk[q+2]!==b.stride||pk[q+3]!==o){gl.vertexAttribPointer(f.perm,f.comps,T[f.type],false,b.stride,o);pk[q]=f.comps;pk[q+1]=f.type;pk[q+2]=b.stride;pk[q+3]=o;}
   en|=1<<f.perm;}
  for(let k=0;k<16;k++)if((HW.en&~en)&(1<<k)){gl.disableVertexAttribArray(k);pk[k*5]=-1;}HW.en=en;
+ for(const v of hwFixed){v[0]=v[1]=v[2]=0;v[3]=1;}g.applyFixedAttributes(hwFixed);
+ for(let k=0;k<16;k++)if(!(en&(1<<k))){const v=hwFixed[k],o=k*4;
+  if(v.some((x,i)=>x!==hwFixedCache[o+i])){gl.vertexAttrib4f(k,v[0],v[1],v[2],v[3]);for(let i=0;i<4;i++)hwFixedCache[o+i]=v[i];}}
  const ib=D.cnt*2;let io=0;
  if(R.io+ib>R.is){gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,R.is,gl.STREAM_DRAW);R.io=0;}
  io=R.io;gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,io,HW.i16,0,D.cnt);R.io=(io+ib+15)&~15;
@@ -6975,25 +7037,31 @@ function hwDraw(g,p,D,shader){
  stats.hwDraws=(stats.hwDraws|0)+1;stats.hwVerts=(stats.hwVerts|0)+D.cnt;}
 const progKeys=new Map();
 function programFor(g,light,hwd){const R=g.regs;let hA=0x811c9dc5,hB=0x9e3779b9;
- for(let i=0xc0;i<0x100;i++){const x=R[i]|0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
- const ck=(R[0x80]&0x3007)+'|'+(R[0x104]>>>0)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
+ // Constant colours and alpha reference are uniforms, so only preserve the
+ // zero/nonzero distinction needed by stageInfo's empty-stage rule in the key.
+ for(let i=0xc0;i<0x100;i++){let x=R[i]|0;if(i===0xfd)x=0;else if(i===0xc3||i===0xcb||i===0xd3||i===0xdb||i===0xf3||i===0xfb)x=x?1:0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
+ const ck=(R[0x80]&0x3007)+'|'+(R[0x104]&0x71)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
  let p=progKeys.get(ck);if(p)return p;
  if(hwd){const u=(HW.uses.get(ck)|0)+1;if(HW.uses.size>4096)HW.uses.clear();HW.uses.set(ck,u);if(u<HW.PROMOTE)return null;if(HW.pend.size>=HW.MAXPEND){for(const q of [...HW.pend])progReady(q);if(HW.pend.size>=HW.MAXPEND)return null;}}
  p=programForSlow(g,light,hwd);if(progKeys.size>2048)progKeys.clear();progKeys.set(ck,p);return p;}
 let vsObj=null,PSC;
 function progUniforms(p){if(p.isHW)hwUniforms(p);const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);
  p.uTex=[U('uTex'),U('uTex1'),U('uTex2')];p.uSize=[U('uSize'),U('uSize1'),U('uSize2')];p.uWrap=[U('uWrap'),U('uWrap1'),U('uWrap2')];p.uBorder=[U('uBorder'),U('uBorder1'),U('uBorder2')];
+ p.uConst=[0,1,2,3,4,5].map(i=>U('uC'+i));p.uBuf=U('uBuf');p.uAlphaRef=U('uAlphaRef');
  p.uLut=U('uLut');p.uLPos=U('uLPos');p.uLS0=U('uLS0');p.uLS1=U('uLS1');p.uLDif=U('uLDif');p.uLAmb=U('uLAmb');p.uLSpot=U('uLSpot');p.uLDA=U('uLDA');p.uLGAmb=U('uLGAmb');}
 // Shader compiles can take 100 ms-seconds each on desktop drivers (ANGLE/D3D). With KHR_parallel_shader_compile they
 // run on driver threads; a draw whose program is not ready yet is skipped instead of stalling the whole emulator.
 function progReady(p){if(!p.pending)return true;
- {const t=performance.now();if(t-(p.poll||0)<6)return false;p.poll=t;}
+ {const t=performance.now();if(p.poll!==undefined&&t-p.poll<(p.isHW?250:6))return false;p.poll=t;}
  if(!gl.getProgramParameter(p.pr,PSC.COMPLETION_STATUS_KHR)){stats.deferredDraws=(stats.deferredDraws|0)+1;return false;}
  p.pending=false;HW.pend.delete(p);globalThis.__HWPEND=HW.pend.size;
  if(!gl.getProgramParameter(p.pr,gl.LINK_STATUS))p.failed='WebGL link: '+gl.getProgramInfoLog(p.pr)+' '+(gl.getShaderInfoLog(p.fsh)||'');
  else progUniforms(p);
  return true;}
 function programForSlow(g,light,hwd){const fs0=fragmentSource(g,light),fs=hwd?fs0+'\n//HW '+hwd.vkey:fs0;let p=programs.get(fs);if(p)return p;
+ // Some mobile drivers block even on completion queries or synchronous linking.
+ // Keep using the existing CPU-vertex path while rate-limiting promotions.
+ if(hwd){const now=performance.now();if(now<HW.nextCompile)return null;HW.nextCompile=now+500;}
  if(PSC===undefined)PSC=gl.getExtension('KHR_parallel_shader_compile')||null;
  if(PSC){
   if(!vsObj){vsObj=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(vsObj,VS);gl.compileShader(vsObj);}
@@ -7124,12 +7192,12 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
   for(let field=0;field<num&&field<12;field++){
    const at=field<8?(cA>>>(field*4))&15:(cB>>>((field-8)*4))&15;
    if(at>=12){cursor=(cursor+3)&~3;cursor+=(at-11)*4;continue;}
-   if(at>=count||(fixed&(1<<at)))continue;
    const nib=at<8?(R[0x201]>>>(at*4))&15:(R[0x202]>>>((at-8)*4))&15,type=nib&3,comps=((nib>>>2)&3)+1,eb=[1,1,2,4][type];
    cursor=(cursor+eb-1)&~(eb-1);
    const perm=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;
    let vb=-1;try{vb=GPUc.gpuToVirtual(phys);}catch(e){vb=-1;}
-   plan.push(phys,stride,cursor,type,comps,eb,perm,vb);if(perm+1>nIn)nIn=perm+1;cursor+=comps*eb;}}
+   if(at<count&&!(fixed&(1<<at))){plan.push(phys,stride,cursor,type,comps,eb,perm,vb);if(perm+1>nIn)nIn=perm+1;}cursor+=comps*eb;}}
+ const fixedRows=[];for(let at=0;at<count&&at<12;at++)if(fixed&(1<<at)){const reg=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;fixedRows.push([reg,g.fixedAttributes[at]]);nIn=Math.max(nIn,reg+1);}
  const N=idx.length;if(!plan.length||!N)return -9;
  const tri=(mode===0||mode===3)?Math.floor(N/3):Math.max(0,N-2);if(!tri)return -9;
  const nOut=tri*3;
@@ -7145,6 +7213,7 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
  const shade=id=>{if(stamp[id]===cur)return slotOf[id];
   if(id>65535||uniq>=CAP)throw Error('vp index');
   const o=ibase+uniq*nIn*4;for(let r=0;r<nIn;r++){INB[o+r*4]=0;INB[o+r*4+1]=0;INB[o+r*4+2]=0;INB[o+r*4+3]=1;}
+  for(const [reg,v] of fixedRows)for(let k=0;k<4;k++)INB[o+reg*4+k]=v[k];
   for(let q=0;q<plan.length;q+=8){
    const phys=plan[q],stride=plan[q+1],off=plan[q+2],type=plan[q+3],comps=plan[q+4],eb=plan[q+5],reg=plan[q+6],vb=plan[q+7];
    const p0=(phys+id*stride+off)>>>0,a0=vb>=0?(vb+id*stride+off)>>>0:0,ob=o+reg*4;
@@ -7200,12 +7269,12 @@ function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
   for(let field=0;field<num&&field<12;field++){
    const at=field<8?(cA>>>(field*4))&15:(cB>>>((field-8)*4))&15;
    if(at>=12){cursor=(cursor+3)&~3;cursor+=(at-11)*4;continue;}
-   if(at>=count||(fixed&(1<<at)))continue;
    const nib=at<8?(R[0x201]>>>(at*4))&15:(R[0x202]>>>((at-8)*4))&15,type=nib&3,comps=((nib>>>2)&3)+1,eb=[1,1,2,4][type];
    cursor=(cursor+eb-1)&~(eb-1);
    const perm=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;
    let vb=-1;try{vb=GPUc.gpuToVirtual(phys);}catch(e){vb=-1;}
-   plan.push(phys,stride,cursor,type,comps,eb,perm,vb);cursor+=comps*eb;}}
+   if(at<count&&!(fixed&(1<<at)))plan.push(phys,stride,cursor,type,comps,eb,perm,vb);cursor+=comps*eb;}}
+ g.applyFixedAttributes(IN);
  // output semantic map (mirrors semantic(): later slots overwrite earlier ids)
  const sem=FV.sem;sem.fill(-1);{const mask=R[0x2bd];let slot=0;
   for(let reg=0;reg<16;reg++)if(mask&(1<<reg)){const mp=R[0x50+slot]>>>0;for(let c=0;c<4;c++){const id=(mp>>>(c*8))&31;if(id<24)sem[id]=reg*4+c;}slot++;}}
@@ -7260,7 +7329,7 @@ function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
 function drawGL(...a){const t0=performance.now();try{return drawGL_(...a);}finally{stats.msGL=(stats.msGL||0)+performance.now()-t0;}}
 function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,GJ,HWD,HSH){
  const rt=rtFor(m,addr,width,height,(g.regs[0x117]>>>16)&7);if(rt.memStale)upload(rt);
- const TP=performance.now();let p;try{p=programFor(g,light,HWD);if(!p)return {hwFail:true,soft:true};}catch(e){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(e&&e.message).slice(0,300);return {hwFail:true};}throw e;}if(p.pending&&!progReady(p)){if(HWD)return {hwFail:true,soft:true};return {pixels:0,triangles:0,width,height,format:0,address:addr};}if(p.failed){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(p.failed).slice(0,300);return {hwFail:true};}throw Error(p.failed);}const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
+ const TP=performance.now();let p;try{p=programFor(g,light,HWD);if(!p)return {hwFail:true,soft:true};}catch(e){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(e&&e.message).slice(0,300);return {hwFail:true};}throw e;}if(p.pending&&!progReady(p)){if(HWD)return {hwFail:true,soft:true};return null;}if(p.failed){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(p.failed).slice(0,300);return {hwFail:true};}throw Error(p.failed);}const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
  // GC mirrors the GL state this function sets; other GL users call gcReset(). Unchanged state costs no GL call
  // (each call is an IPC round trip on mobile browsers).
  if(GC.fbo!==rt.fbo){FL();gl.bindFramebuffer(gl.FRAMEBUFFER,rt.fbo);GC.fbo=rt.fbo;}
@@ -7286,6 +7355,12 @@ function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,src
    gl.blendEquationSeparate(E[eqRgb],E[eqA]);gl.blendFuncSeparate(F[srcRgb],F[dstRgb],F[srcA],F[dstA]);
    gl.blendColor((bc&255)/255,((bc>>>8)&255)/255,((bc>>>16)&255)/255,(bc>>>24)/255);}
    else gl.disable(gl.BLEND);GC.bl=bk;}}
+ // Shader constants vary per draw. Uniform changes flush queued vertices first,
+ // so batches always use the values that were active when they were submitted.
+ {const ids=[0xc3,0xcb,0xd3,0xdb,0xf3,0xfb],old=p.cv||(p.cv=[]);
+  for(let i=0;i<6;i++){const v=g.regs[ids[i]]>>>0,loc=p.uConst[i];if(loc!==null&&old[i]!==v){FL();old[i]=v;gl.uniform4f(loc,v&255,(v>>>8)&255,(v>>>16)&255,v>>>24);}}
+  const v=g.regs[0xfd]>>>0;if(p.uBuf!==null&&p.bv!==v){FL();p.bv=v;gl.uniform4f(p.uBuf,v&255,(v>>>8)&255,(v>>>16)&255,v>>>24);}
+  const ref=(g.regs[0x104]>>>8)&255;if(p.uAlphaRef!==null&&p.av!==ref){FL();p.av=ref;gl.uniform1f(p.uAlphaRef,ref);}}
  const T=GC.tx||(GC.tx=[null,null,null,null,null]);
  for(let u=0;u<3;u++){const t=tex[u];
   if(t){if(T[u]!==t.tex){FL();gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t.tex);T[u]=t.tex;}
@@ -7364,6 +7439,7 @@ class GPU{
   this.vshCodeIndex=0;this.vshOpdescIndex=0;
   this.shaderInstructionWrites=0;this.shaderDescriptorWrites=0;
   this.shaderUniforms=Array.from({length:96},()=>[0,0,0,0]);this.shaderBools=Array(16).fill(false);this.shaderInts=Array.from({length:4},()=>[0,0,0,0]);
+  this.fixedAttributes=Array.from({length:16},()=>[0,0,0,1]);this.fixedAttributeIndex=0;this.fixedAttributeWords=[];
   this.uniformIndex=0;this.uniformWordQueue=[];this.uniformFormat32=false;this.uniformWrites=0;
   this.guestMemory=null;this.shaderVerticesTested=0;this.shaderVertexFailures=0;this.lastShaderFault=null;this.lastShaderOutput=null;
   this.drawContexts=[];this.rasterizedDraws=0;this.rasterizedTriangles=0;this.rasterizedPixels=0;this.rasterFailures=0;this.lastRasterFault=null;
@@ -7388,6 +7464,11 @@ class GPU{
   if(id>=0x1c8&&id<=0x1cf){const ix=this.regs[0x1c5]>>>0,type=(ix>>>8)&31,i=ix&255;
    if(type<24){const T=(this.lightLuts||(this.lightLuts=Array.from({length:24},()=>new Uint32Array(256))))[type];if(T[i]!==this.regs[id]){T[i]=this.regs[id];this.lightLutVer=(this.lightLutVer|0)+1;}}
    this.regs[0x1c5]=((ix&~255)|((i+1)&255))>>>0;}
+  // PICA default attributes are a packed float24 FIFO, separate from shader uniforms.
+  if(id===0x232){this.fixedAttributeIndex=this.regs[id]&15;this.fixedAttributeWords=[];}
+  if(id>=0x233&&id<=0x235){this.fixedAttributeWords.push(this.regs[id]);
+   if(this.fixedAttributeWords.length===3){if(this.fixedAttributeIndex<15){this.fixedAttributes[this.fixedAttributeIndex]=Shader.decodeUniform24(...this.fixedAttributeWords);this.fixedAttributeIndex++;this.regs[0x232]=this.fixedAttributeIndex;}
+    this.fixedAttributeWords=[];}}
   if(id===0x23c||id===0x23d)this._jump=id-0x23c;
   if(id===0x2b0){for(let i=0;i<16;i++)this.shaderBools[i]=!!(this.regs[id]&(1<<i));}
   if(id>=0x2b1&&id<=0x2b4){const r=id-0x2b1,v=this.regs[id];this.shaderInts[r]=[v&255,(v>>>8)&255,(v>>>16)&255,v>>>24];}
@@ -7442,6 +7523,10 @@ class GPU{
   const base=this.physicalBase(),indexReg=this.regs[0x227],address=GPU.gpuToVirtual((base+(indexReg&0x0fffffff))>>>0);
   const result=new Uint32Array(count);for(let i=0;i<count;i++)result[i]=draw.indexed?((indexReg&0x80000000)?memory.read16(address+i*2):memory.read8(address+i)):draw.vertexOffset+i;
   return result;}
+ // Copy fixed attributes through the same input permutation as array attributes.
+ applyFixedAttributes(input){const R=this.regs,mask=(R[0x202]>>>16)&0xfff,count=((R[0x202]>>>28)&15)+1;
+  for(let i=0;i<count&&i<12;i++)if(mask&(1<<i)){const reg=i<8?(R[0x2bb]>>>(i*4))&15:(R[0x2bc]>>>((i-8)*4))&15,v=this.fixedAttributes[i],d=input[reg];
+   for(let k=0;k<4;k++)d[k]=v[k];}return input;}
  // Read a single hardware-configured vertex, respecting per-attribute element alignment.
  readVertex(index,memory=this.guestMemory){if(!memory)throw Error('Missing guest memory');if(index>65535)throw Error('PICA vertex index out of range');
   const result=Array.from({length:16},()=>[0,0,0,1]),fixed=(this.regs[0x202]>>>16)&0xfff;
@@ -7456,9 +7541,9 @@ class GPU{
    for(let field=0;field<num&&field<12;field++){
     const attribute=field<8?(configA>>>(field*4))&15:(configB>>>((field-8)*4))&15;
     if(attribute>=12){cursor=(cursor+3)&~3;cursor+=(attribute-11)*4;continue;}
-    if(attribute>=count||(fixed&(1<<attribute)))continue;
-    const nib=fmtFor(attribute),type=nib&3,components=((nib>>>2)&3)+1,elementBytes=[1,1,2,4][type];
+     const nib=fmtFor(attribute),type=nib&3,components=((nib>>>2)&3)+1,elementBytes=[1,1,2,4][type];
     cursor=(cursor+elementBytes-1)&~(elementBytes-1);
+    if(attribute>=count||(fixed&(1<<attribute))){cursor+=components*elementBytes;continue;}
     const v=[0,0,0,1];for(let k=0;k<components;k++){
      const addr=GPU.gpuToVirtual(phys+cursor+k*elementBytes);
      if(type===0){const b=memory.read8(addr);v[k]=(b<<24)>>24;}
@@ -7469,7 +7554,7 @@ class GPU{
     result[perm(attribute)]=v;cursor+=components*elementBytes;
    }
   }
-  return result;
+  return this.applyFixedAttributes(result);
  }
  // Render targets that feed a display transfer are screens; anything else (face/mask textures, shadow maps)
  // is a render-to-texture pass that must run even on skipped frames or the texture stays empty forever.
@@ -7477,7 +7562,7 @@ class GPU{
  drawTargetsScreen(){const a=this.screenSrc;if(!a||!a.length)return true;
   const R=this.regs,dim=R[0x11e]>>>0,w=dim&0x7ff,h=((dim>>>12)&0x3ff)+1,pa=(R[0x11d]<<3)>>>0;
   const v=pa>=0x18000000&&pa<0x18600000?pa+0x7000000:pa>=0x20000000&&pa<0x28000000?pa-0x0c000000:-1;if(v<0)return true;
-  const len=w*h*[4,3,2,2][R[0x117]&3];for(const e of a)if(e[0]<v+len&&v<e[0]+e[1])return true;return false;}
+  const len=w*h*[4,3,2,2,2][(R[0x117]>>>16)&7];for(const e of a)if(e[0]<v+len&&v<e[0]+e[1])return true;return false;}
  probeRealDraw(draw){if(this.skipRaster){if(this.drawTargetsScreen()){this.skippedDraws++;return;}this.offscreenDraws=(this.offscreenDraws|0)+1;}if(!this.guestMemory||draw.vertices<1||this.shaderInstructionWrites===0)return;
   try{const indices0=this.readIndices(draw);const firstIndex=indices0[0];
    // One VertexShader per (code, descriptors, entry): compiledShader() builds a key from all 8K words, far too slow per draw.
@@ -7610,13 +7695,13 @@ class Scheduler{
  // Wait-all acquisition is a transaction: none of the wait objects may be
  // consumed until *every* object is ready. This matters for oneshot GPU/HID
  // events and semaphore counts during game startup.
- isSignaled(obj){return obj.type==='thread'?obj.state==='exited':
-  obj.type==='event'?!!obj.signaled:obj.type==='mutex'?!obj.locked:
+ isSignaled(obj,thread){return obj.type==='thread'?obj.state==='exited':
+  obj.type==='event'?!!obj.signaled:obj.type==='mutex'?(!obj.locked||obj.owner===thread):
   obj.type==='semaphore'?obj.count>0:false;}
- canAcquireAll(objects){
+ canAcquireAll(objects,thread){
   const uses=new Map();for(const obj of objects)uses.set(obj,(uses.get(obj)||0)+1);
   for(const [obj,count] of uses){
-   if(!this.isSignaled(obj))return false;
+   if(!this.isSignaled(obj,thread))return false;
    if(obj.type==='semaphore'&&obj.count<count)return false;
    if((obj.type==='mutex'||(obj.type==='event'&&obj.reset===0))&&count>1)return false;
   }
@@ -7624,11 +7709,11 @@ class Scheduler{
  }
  acquire(obj,thread){
   if(obj.type==='event'&&obj.reset===0)obj.signaled=false;
-  else if(obj.type==='mutex'){obj.locked=true;obj.owner=thread;}
+  else if(obj.type==='mutex'){obj.locked=true;obj.owner=thread;obj.lockCount=(obj.lockCount||0)+1;(thread.heldMutexes??=new Set()).add(obj);}
   else if(obj.type==='semaphore')obj.count--;
  }
  acquireAll(objects,thread){
-  if(!this.canAcquireAll(objects))return false;
+  if(!this.canAcquireAll(objects,thread))return false;
   for(const obj of objects)this.acquire(obj,thread);
   return true;
  }
@@ -7644,7 +7729,7 @@ class Scheduler{
     if(!this.acquireAll(t.wait.objects,t))continue;
     t.cpu.regs[1]=0xffffffff; // no single winning index in wait-all mode
    }else{
-    if(!this.isSignaled(obj))break;
+    if(!this.isSignaled(obj,t))break;
     this.acquire(obj,t);
     if(t.wait?.kind==='objects')t.cpu.regs[1]=t.wait.objects.indexOf(obj);
    }
@@ -7736,7 +7821,10 @@ class Scheduler{
   this.current=last;
   return {executed,fault,halted:this.threads.every(t=>t.state==='exited'),waiting:stalled&&!this.threads.some(t=>t.state==='ready'),idleClock:stalled&&!!this.kernel.gsp?.event,reason:last?.cpu.reason??null};
  }
- notifyExit(obj){this.wakeObject(obj,{all:true});}
+ notifyExit(obj){
+  // A terminating owner cannot keep other threads blocked forever.
+  for(const mutex of obj.heldMutexes||[]){mutex.locked=false;mutex.lockCount=0;mutex.owner=null;this.wakeObject(mutex);}
+  obj.heldMutexes?.clear();this.wakeObject(obj,{all:true});}
   statistics(){
    const starvationLimit=1000000000n;
    const starved=t=>t.state==='ready'&&t.readySince!==undefined&&this.time-t.readySince>=starvationLimit&&
@@ -7990,7 +8078,7 @@ function createExecutionController(send){
  // not rasterized at all (the game logic still runs every frame), which is where
  // most of the time went: the old preview showed one frame per 800 ms but
  // rasterized every frame.
- let webglWanted=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;let fsMul=3,fsCtlT=0;
+ let webglWanted=true,mirrorBottom=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;let fsMul=3,fsCtlT=0;
  let gameFrames=0,previewsSent=0,sentFid=0,ackFid=0;
  // Frames reach the page either as a GPU ImageBitmap ('bitmap') or by reading
  // the pixels back ('readback'). Which is faster depends on the device, so the
@@ -8024,6 +8112,7 @@ function createExecutionController(send){
    gl:typeof PICAWebGL!=='undefined'&&PICAWebGL.active,track:!(gs.trackOff),jit:typeof JitARM==='undefined'?'none':(JitARM.available?(JitARM.backend==='wasm'?'WASM JIT'+(globalThis.__ARENA_SHARED?' (shared mem)':''):'JS JIT'):'interpreter'),jitPct:Math.round(((JitARM?.stats?.instructions||0)-(perf.j0||0))*100/Math.max(1,(perf.ins1-(perf.ins0||0)))),compMs:Math.round(((JitARM?.stats?.compileMs||0)-(perf.c0||0))*1000/dt),mips:Math.round((perf.ins1-(perf.ins0||0))/dt/1000),idle:Math.max(0,Math.round((dt-perf.tick)/dt*100))};
   {const T=gs.glT||{};const P0=perf.g0||{};const arr=[];for(const k in T){if(k[0]==='#')continue;const d=T[k]-(P0[k]||0);if(d>=1)arr.push([k,d,(T['#'+k]|0)-(P0['#'+k]|0)]);}
    arr.sort((a,b)=>b[1]-a[1]);{const ph=(k)=>Math.round(((gs[k]||0)-(perf[k+'0']||0))*100/dt);perf.last.ph='vert '+ph('msVert')+'% · tex '+ph('msTex')+'% · drawGL '+ph('msGL')+'% · draws '+((gs.draws|0)-(perf.dr0|0))+' · pool '+(gs.vpDraws|0)+(gs.vpBad?' BAD '+gs.vpBad:'')+'<br>pool: fetch '+ph('vpFetch')+'% · wait '+ph('vpWait')+'% · copy '+ph('vpCopy')+'% · '+Math.round(((gs.vpVerts|0)-(perf.vv0|0))/(dt/1000))+' verts/s ×'+(globalThis.__VPOOL_N||0)+(globalThis.__HWVS?' · HW '+(gs.hwDraws|0)+' draws'+(gs.hwErr?' ERR '+gs.hwErr.slice(0,80):'')+(gs.hwWhy?' why '+gs.hwWhy:''):' · HW off');{const J=(typeof JitARM!=='undefined'&&JitARM.stats)||{},pm=performance.memory;perf.last.ph+='<br>JIT: regions '+(J.wasmRegions|0)+' · cache hits '+(J.cacheHits|0)+(J.cacheRejected?' (rejected '+J.cacheRejected+')':'')+' · AOT '+(J.aotReady|0)+'/'+(J.aotQueued|0)+(J.aotMs?' in '+J.aotMs+' ms':'')+' used '+(J.aotUsed|0)+' · HW verts/s '+Math.round(((gs.hwVerts|0)-(perf.hv0|0))/(dt/1000))+(pm?' · heap '+Math.round(pm.usedJSHeapSize/1048576)+' MB':'');perf.hv0=gs.hwVerts|0;}perf.last.ph+='<br>frames '+((gs.fsB|0)-(perf.fb0|0))+' · rendered '+((gs.fsR|0)-(perf.fr0|0))+' · attempts '+((gs.fsAtt|0)-(perf.fa0|0))+' · ok '+((gs.fsOk|0)-(perf.fo0|0))+' · ack '+sentFid+'/'+ackFid+' · interval '+(gs.fsDbg?gs.fsDbg[1]:0)+' ms · cost '+(gs.fsDbg?gs.fsDbg[0]:0)+' ms';perf.fb0=gs.fsB|0;perf.fr0=gs.fsR|0;perf.fa0=gs.fsAtt|0;perf.fo0=gs.fsOk|0;
+   perf.last.ph+='<br>readbacks: RT '+((gs.rtReadbacks|0)-(perf.rb0|0))+' · LCD '+((gs.lcdReadbacks|0)-(perf.lb0|0))+' · probe '+((gs.litReads|0)-(perf.lr0|0))+' · avoided '+((gs.discardedReadbacks|0)-(perf.rd0|0));perf.rb0=gs.rtReadbacks|0;perf.lb0=gs.lcdReadbacks|0;perf.lr0=gs.litReads|0;perf.rd0=gs.discardedReadbacks|0;
    perf.vpFetch0=gs.vpFetch||0;perf.vpWait0=gs.vpWait||0;perf.vpCopy0=gs.vpCopy||0;perf.vv0=gs.vpVerts|0;perf.msVert0=gs.msVert||0;perf.msTex0=gs.msTex||0;perf.msGL0=gs.msGL||0;perf.dr0=gs.draws|0;}
    perf.last.glTop=arr.slice(0,4).map(a=>a[0]+' '+Math.round(a[1]*1000/dt)/10+'% x'+a[2]).join(' · ');perf.g0=Object.assign({},T);}
   perf.tick=0;perf.prev=0;perf.prevN=0;perf.d0=gs.drawMs||0;perf.t0=now;perf.ins0=perf.ins1;perf.j0=JitARM?.stats?.instructions||0;perf.c0=JitARM?.stats?.compileMs||0;}
@@ -8119,7 +8208,7 @@ function createExecutionController(send){
  const post=()=>send({type:'state',...machine.snapshot(),running,busy,clockMultiplier,gameFrames,perf:perf.last,gpuWasm:typeof WasmGPU!=='undefined'?{available:WasmGPU.available,error:WasmGPU.error,draws:WasmGPU.stats.draws,pixels:WasmGPU.stats.pixels,misses:WasmGPU.stats.misses}:null,wasm:typeof WasmARM!=='undefined'?{available:WasmARM.available,error:WasmARM.error,blocks:WasmARM.stats.blocks,instructions:WasmARM.stats.instructions}:null});
  function sendGuestPreview(strict=false,targets=null){
   if(!machine.memory){if(strict)throw Error('Load an executable before refreshing the LCD scanout.');return false;}
-  const fid=++sentFid;
+  const fid=sentFid+1;
   // GSP reports actual LCD scanout buffers, which differ from the current PICA draw target.
   // Both screens are stored in 240-wide, portrait-rotated guest memory.
   const screens=machine.kernel?.gsp?.framebuffers;
@@ -8128,8 +8217,8 @@ function createExecutionController(send){
    const list=[['top',400],['bottom',320]];let done=[false,false];
    if(typeof PICAWebGL!=='undefined'&&PICAWebGL.active&&PM.mode==='bitmap'){
     const q=list.map(([screen,height])=>{const d=screens[screen];if(targets?.only&&!targets[screen])return {addr:-1,w:0,h:0,fmt:-1};return d&&d.left?{addr:(targets&&targets[screen])||d.left,w:240,h:height,fmt:d.format&7,stride:d.stride|0}:{addr:-1,w:0,h:0,fmt:-1};});
-    const r=PICAWebGL.present(machine.memory,q);
-    if(r){done=r.shown;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
+    const r=PICAWebGL.present(machine.memory,q,mirrorBottom);
+    if(r){done=r.shown;sentFid=fid;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
    }
    for(let si=0;si<list.length;si++){const [screen,height]=list[si];if(done[si])continue;
     const d=screens[screen];if(!d||!d.left||(targets?.only&&!targets[screen]))continue;const address=(targets&&targets[screen])||d.left;
@@ -8138,12 +8227,14 @@ function createExecutionController(send){
      const frame=PICA200.GPU.decodeFramebuffer(machine.memory,{
       address,width:240,height,format:d.format&7,stride:d.stride
      });
-     send({type:'guest-screen',fid,screen,source:'GSP LCD scanout',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);
+     sentFid=fid;send({type:'guest-screen',fid,screen,source:'GSP LCD scanout',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);
      success=true;
     }catch(e){lastError=e;}
    }
    if(success)return true;
   }
+  // A selective frame update must never fall back to an unrelated draw target.
+  if(targets?.only)return false;
   // Before GSP establishes an LCD buffer, an intermediate raster target can
   // still show useful progress, but do not mislabel it as top-screen output.
   if(machine.gpu?.rasterizedDraws){
@@ -8153,7 +8244,7 @@ function createExecutionController(send){
     try{
      const address=PICA200.GPU.gpuToVirtual((r[0x11d]<<3)>>>0);
      const frame=PICA200.GPU.decodeTiledTexture(machine.memory,{address,width,height,format,flipY:true});
-     send({type:'guest-screen',fid,screen:'bottom',source:'intermediate PICA render target',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);return true;
+     sentFid=fid;send({type:'guest-screen',fid,screen:'bottom',source:'intermediate PICA render target',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);return true;
     }catch(e){lastError=e;}
    }
   }
@@ -8161,6 +8252,20 @@ function createExecutionController(send){
   return false;
  }
 
+ // The periodic fallback must obey the same validity and backpressure rules as
+ // frame-boundary presentation, or it can expose partially skipped frames.
+ function fallbackGuestPreview(){
+  if(sentFid-ackFid>=2)return false;
+  const k=machine.kernel,xo=k?.fsXferOk;
+  if(frameSkip&&xo){
+   if(!xo.top&&!xo.bottom)return false;
+   const ok=sendGuestPreview(false,{top:xo.top?k.fsXfer.top:0,bottom:xo.bottom?k.fsXfer.bottom:0,only:true});
+   if(ok){xo.top=false;xo.bottom=false;}
+   return ok;
+  }
+  if(frameSkip&&machine.gpu?.skipRaster)return false;
+  return sendGuestPreview();
+ }
  function stop(){running=false;if(timer!==null)clearTimeout(timer);timer=null;persistSaves(machine);persistJit(machine,true);}
  function tick(){
   if(!running)return;
@@ -8171,7 +8276,7 @@ function createExecutionController(send){
    if(ahead>4){lastTickEnd=now;timer=setTimeout(tick,Math.min(16,ahead));return;}
    if(ahead<-250){paceWall=now;paceVirt=virtMs();}   // far behind: don't try to catch up in a burst
   }
-  try{let result,idle=false;const began=performance.now();try{const workerContext=typeof document==='undefined'&&typeof postMessage==='function';const sliceMs=workerContext?32:10;do{result=machine.run(65536);if(speedLimit&&(virtMs()-paceVirt)-(performance.now()-paceWall)>4)break;if(result.state==='waiting'&&machine.idleClock){idle=true;break;}if(['exited','fault','waiting'].includes(result.state)){stop();break;}}while(running&&performance.now()-began<sliceMs);}finally{perf.tick+=performance.now()-began;perfSample();}const now=Date.now();if(now-lastGuestFrame>800&&!(performance.now()-fsLastBoundaryPreview<1500)&&(machine.kernel?.gsp?.framebuffers?.top?.left||machine.kernel?.gsp?.framebuffers?.bottom?.left||machine.gpu?.rasterizedDraws>lastGuestDraw)){if(sendGuestPreview()){lastGuestFrame=now;lastGuestDraw=machine.gpu.rasterizedDraws;}}maybePersist();if(!running||now-lastReport>250){lastReport=now;post();}lastTickEnd=performance.now();if(running)timer=setTimeout(tick,idle?16:0);}
+  try{let result,idle=false;const began=performance.now();try{const workerContext=typeof document==='undefined'&&typeof postMessage==='function';const sliceMs=workerContext?32:10;do{result=machine.run(65536);if(speedLimit&&(virtMs()-paceVirt)-(performance.now()-paceWall)>4)break;if(result.state==='waiting'&&machine.idleClock){idle=true;break;}if(['exited','fault','waiting'].includes(result.state)){stop();break;}}while(running&&performance.now()-began<sliceMs);}finally{perf.tick+=performance.now()-began;perfSample();}const now=Date.now();if(now-lastGuestFrame>800&&!(performance.now()-fsLastBoundaryPreview<1500)&&(machine.kernel?.gsp?.framebuffers?.top?.left||machine.kernel?.gsp?.framebuffers?.bottom?.left||machine.gpu?.rasterizedDraws>lastGuestDraw)){if(fallbackGuestPreview()){lastGuestFrame=now;lastGuestDraw=machine.gpu.rasterizedDraws;}}maybePersist();if(!running||now-lastReport>250){lastReport=now;post();}lastTickEnd=performance.now();if(running)timer=setTimeout(tick,idle?16:0);}
   catch(e){stop();send({type:'error',message:e.message});post();}
  }
  return async function handle(data){
@@ -8236,6 +8341,7 @@ function createExecutionController(send){
     const parsed=Local3DSAssets.parseKeyBundle(data.text);keyring=parsed.titleKeys;aesKeyring=parsed.aesKeys;send({type:'asset-status',asset:'keys',text:keyring.size+' title keys and '+aesKeyring.size+' Azahar AES entries loaded locally (no key values displayed). NCCH AES-CTR decryption available; seed-encrypted titles require seeddb.bin.'});
    }else if(data.type==='cpu-backend'){if(typeof JitARM!=='undefined'&&JitARM.setBackend)JitARM.setBackend(data.mode);
    }else if(data.type==='webgl'){webglWanted=!!data.enabled;if(typeof PICAWebGL!=='undefined'){if(webglWanted)PICAWebGL.init();PICAWebGL.enabled=webglWanted;}send({type:'webgl-status',available:typeof PICAWebGL!=='undefined'&&PICAWebGL.available,error:typeof PICAWebGL!=='undefined'?PICAWebGL.error:'missing'});
+   }else if(data.type==='mirror-bottom'){mirrorBottom=!!data.enabled;
    }else if(data.type==='frame-skip'){frameSkip=!!data.enabled;if(!frameSkip){fsRender=true;if(machine.gpu)machine.gpu.skipRaster=false;}
    }else if(data.type==='speed-limit'){speedLimit=!!data.enabled;paceWall=performance.now();paceVirt=virtMs();
    }else if(data.type==='clock'){
@@ -8273,12 +8379,71 @@ function createExecutionController(send){
 
 
 </script>
+<script id="webgpu-display-code">
+// Optional WebGPU scanout. PICA geometry, depth and TEV still run in WebGL2.
+// No GPU->CPU readback is added: incoming ImageBitmaps are copied on the GPU.
+(function(root){'use strict';
+let device=null,pipeline=null,serial=0,wanted=false;
+const targets=new Map(),stats={frames:0,uploads:0,error:null};
+const status=text=>{const e=document.getElementById('webgpu-status');if(e)e.textContent=text;};
+const shader=`@group(0) @binding(0) var frame: texture_2d<f32>;
+@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
+ let p=array<vec2f,3>(vec2f(-1.0,-1.0),vec2f(3.0,-1.0),vec2f(-1.0,3.0));return vec4f(p[i],0.0,1.0);
+}
+@fragment fn fs(@builtin(position) p:vec4f)->@location(0) vec4f {
+ return vec4f(textureLoad(frame,vec2i(p.xy),0).rgb,1.0);
+}`;
+function restore(){for(const [id,t] of targets){t.texture?.destroy();t.context.unconfigure();const c=document.getElementById(id);if(c===t.canvas)c.replaceWith(c.cloneNode(false));}targets.clear();}
+function fail(error){stats.error=String(error?.message||error);wanted=false;serial++;restore();const d=device;device=null;pipeline=null;d?.destroy();
+ const e=document.getElementById('webgpu-toggle');if(e)e.checked=false;status('2D display fallback: '+stats.error);}
+async function setEnabled(value){wanted=!!value;const token=++serial;
+ restore();const old=device;device=null;pipeline=null;old?.destroy();
+ if(!wanted){status('Off · 3D renderer: WebGL2');return false;}
+ status('Starting WebGPU display…');let d=null;
+ try{
+  if(!navigator.gpu)throw Error('WebGPU unavailable');
+  const adapter=await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+  if(!adapter)throw Error('No WebGPU adapter');if(token!==serial)return false;
+  d=await adapter.requestDevice();if(token!==serial){d.destroy();return false;}
+  d.pushErrorScope('validation');
+  const module=d.createShaderModule({code:shader});
+  const p=await d.createRenderPipelineAsync({layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:navigator.gpu.getPreferredCanvasFormat()}]},primitive:{topology:'triangle-list'}});
+  const error=await d.popErrorScope();if(error)throw Error(error.message);
+  if(token!==serial){d.destroy();return false;}
+  device=d;pipeline=p;stats.error=null;
+  d.lost.then(info=>{if(device===d&&wanted)fail('WebGPU device lost: '+info.message);});
+  d.addEventListener('uncapturederror',event=>{if(device===d&&wanted)fail(event.error);});
+  status('Active: WebGPU display · 3D renderer: WebGL2');return true;
+ }catch(error){if(d&&d!==device)d.destroy();if(token===serial)fail(error);return false;}
+}
+function paint(canvas,data){if(!device||!pipeline||!wanted)return null;
+ try{const id=canvas.id,w=data.width,h=data.height;let t=targets.get(id);
+  if(!t||t.canvas!==canvas){
+   // A canvas cannot change context type. Preserve ID, CSS classes and dimensions.
+   const fresh=canvas.cloneNode(false);canvas.replaceWith(fresh);canvas=fresh;
+   const context=canvas.getContext('webgpu');if(!context)throw Error('WebGPU canvas unavailable');
+   t={canvas,context,w:0,h:0,texture:null,group:null};targets.set(id,t);
+   context.configure({device,format:navigator.gpu.getPreferredCanvasFormat(),alphaMode:'opaque'});
+  }
+  if(t.w!==w||t.h!==h){t.texture?.destroy();canvas.width=w;canvas.height=h;t.w=w;t.h=h;
+   t.texture=device.createTexture({size:[w,h],format:'rgba8unorm',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST|GPUTextureUsage.RENDER_ATTACHMENT});
+   t.group=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:t.texture.createView()}]});}
+  if(data.bitmap)device.queue.copyExternalImageToTexture({source:data.bitmap,origin:{x:data.sx|0,y:0}},{texture:t.texture},[w,h]);
+  else device.queue.writeTexture({texture:t.texture},new Uint8Array(data.rgba),{bytesPerRow:w*4,rowsPerImage:h},[w,h]);
+  const encoder=device.createCommandEncoder(),pass=encoder.beginRenderPass({colorAttachments:[{view:t.context.getCurrentTexture().createView(),loadOp:'clear',clearValue:{r:0,g:0,b:0,a:1},storeOp:'store'}]});
+  pass.setPipeline(pipeline);pass.setBindGroup(0,t.group);pass.draw(3);pass.end();device.queue.submit([encoder.finish()]);stats.frames++;stats.uploads++;return canvas;
+ }catch(error){fail(error);return null;}
+}
+root.WebGPUDisplay={setEnabled,paint,stats,get active(){return !!device&&wanted;}};
+})(globalThis);
+</script>
+
 <script>
 
 'use strict';
 const $=id=>document.getElementById(id);
 let execute,worker,workerURL,loaded=false,autoLaunchPending=false;
-const logs=[];let logSize=0;let topBlank=true;let rateMark=0,rateInstructions=0,armIps=0;
+const logs=[];let logSize=0;let topBlank=true,mirrorBottomUI=true;let rateMark=0,rateInstructions=0,armIps=0;
 const statuses={empty:'Choose a file or load the included test.',ready:'Executable loaded. Ready to execute.',paused:'Paused.',waiting:'All guest threads waiting on synchronization.',exited:'Process exited.',fault:'Execution stopped on an unsupported operation or fault.',blocked:'File could not be executed.'};
 function log(text){logs.push(text);logSize+=text.length;while(logSize>20000&&logs.length>1)logSize-=logs.shift().length;$('log').textContent=logs.join('');}
 function receive(data){
@@ -8304,26 +8469,32 @@ function receive(data){
 // Frames are drawn on the next animation frame; if newer ones arrive first the
 // older ones are dropped, so a busy phone never builds up a backlog. The
 // worker waits for the acknowledgement before sending more than two ahead.
-const framePending={bitmap:null,top:null,bottom:null};let frameRAF=0,frameAck=0;
+const framePending={top:null,bottom:null};let frameRAF=0,frameAck=0;
+// A bitmap can contain one or both screens. Retain it until every pending
+// screen using it is replaced or drawn, so partial updates do not erase each other.
+function releaseFrame(f){if(f?.owner&&!--f.owner.refs)f.owner.bitmap.close?.();}
 function queueFrame(data){
- if(data.type==='guest-bitmap'){if(framePending.bitmap)framePending.bitmap.bitmap.close?.();framePending.bitmap=data;for(const sc of data.screens)framePending[sc.screen]=null;}
- else{framePending[data.screen]=data;const b=framePending.bitmap;if(b){b.screens=b.screens.filter(sc=>sc.screen!==data.screen);}}
+ if(data.type==='guest-bitmap'){
+  const owner={bitmap:data.bitmap,refs:0};
+  for(const sc of data.screens){releaseFrame(framePending[sc.screen]);owner.refs++;framePending[sc.screen]={...sc,bitmap:data.bitmap,topLit:data.topLit,owner};}
+  if(!owner.refs)data.bitmap.close?.();
+ }else{releaseFrame(framePending[data.screen]);framePending[data.screen]=data;}
  frameAck=Math.max(frameAck,data.fid|0);
  if(!frameRAF)frameRAF=requestAnimationFrame(drawFrames);}
-function drawFrames(){frameRAF=0;const b=framePending.bitmap,t=framePending.top,bo=framePending.bottom;
- framePending.bitmap=framePending.top=framePending.bottom=null;
- try{if(b){for(const sc of b.screens)showScreen({...sc,bitmap:b.bitmap,topLit:b.topLit});}
-  if(t)showScreen(t);if(bo)showScreen(bo);}
- finally{b?.bitmap?.close?.();if(frameAck)execute({type:'frame-ack',fid:frameAck});}}
+function drawFrames(){frameRAF=0;const t=framePending.top,bo=framePending.bottom;
+ framePending.top=framePending.bottom=null;
+ try{if(t)showScreen(t);if(bo)showScreen(bo);}
+ finally{releaseFrame(t);releaseFrame(bo);if(frameAck)execute({type:'frame-ack',fid:frameAck});}}
 function showScreen(data){if(data.screen==='top')fpsShown++;
   const bmp=data.bitmap||null,sx=data.sx|0;
   {
   const isBottom=data.screen==='bottom';
-  const canvas=$(isBottom?'bottom-preview':'guest-preview');
+  let canvas=$(isBottom?'bottom-preview':'guest-preview');
   let pixels=bmp?null:new Uint8ClampedArray(data.rgba);
-  const paint=c=>{if(c.width!==data.width)c.width=data.width;if(c.height!==data.height)c.height=data.height;const x=c.getContext('2d');
-   if(bmp)x.drawImage(bmp,sx,0,data.width,data.height,0,0,data.width,data.height);else x.putImageData(new ImageData(pixels,data.width,data.height),0,0);};
-  paint(canvas);
+  const paint=c=>{const gpu=WebGPUDisplay.paint(c,data);if(gpu)return gpu;c=$(c.id);
+   if(c.width!==data.width)c.width=data.width;if(c.height!==data.height)c.height=data.height;const x=c.getContext('2d');
+   if(bmp)x.drawImage(bmp,sx,0,data.width,data.height,0,0,data.width,data.height);else x.putImageData(new ImageData(pixels,data.width,data.height),0,0);return c;};
+  canvas=paint(canvas);
   canvas.classList.add('visible');
   $('save-guest-frame').disabled=false;
   if(isBottom){
@@ -8332,7 +8503,7 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
    // Mirror the active bottom output into the large preview; the small LCD
    // below always continues to show the actual guest bottom framebuffer.
    if(topBlank){
-    const big=$('guest-preview');paint(big);
+    const big=paint($('guest-preview'));
     big.classList.add('visible','bottom-mirror');$('empty-screen').style.display='none';
     $('live-screen-name').textContent='BOTTOM LCD MIRROR';
     $('guest-preview-status').textContent='Bottom LCD active · mirrored in main preview · 320×240';
@@ -8343,7 +8514,7 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
    // GPU bitmaps are never read back here (that would stall the page on the
    // GPU); the worker reports whether the top screen has content.
    if(bmp&&typeof data.topLit==='boolean')topBlank=!data.topLit;
-   if(pixels){let lit=0;const step=4*53;for(let i=0;i<pixels.length;i+=step){if(pixels[i]>15||pixels[i+1]>15||pixels[i+2]>15){if(++lit>=3)break;}}
+   if(pixels&&mirrorBottomUI){let lit=0;const step=4*53;for(let i=0;i<pixels.length;i+=step){if(pixels[i]>15||pixels[i+1]>15||pixels[i+2]>15){if(++lit>=3)break;}}
    topBlank=lit<3;}
    if(!topBlank){
     canvas.classList.remove('bottom-mirror');$('live-screen-name').textContent='TOP LCD';
@@ -8353,8 +8524,17 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
   }
   }
 }
-let detailAt=0;
+let detailAt=0,lastReportedFault=null;
 function handleState(data){
+ // Put actionable context into the existing Copy debug log, once per failure.
+ if(data.state==='fault'&&data.error&&lastReportedFault!==data.error){
+  lastReportedFault=data.error;
+  const pc=data.registers?.[15],thread=data.kernel?.threads?.activeThreadId;
+  log('\nExecution fault: '+data.error+'\nInstruction count: '+(data.instructions??'unknown')+
+      '\nRegister PC: '+(pc==null?'unknown':'0x'+(pc>>>0).toString(16).padStart(8,'0'))+
+      '\nActive thread: '+(thread??'unknown')+'\nRecent IPC: '+((data.kernel?.recentIpc||[]).join(' → ')||'none')+'\n');
+ }
+ if(data.state==='ready')lastReportedFault=null;
  if(typeof data.gameFrames==='number')fpsGameFrames=data.gameFrames;if(data.perf)fpsPerf=data.perf;
  if(['fault','exited','blocked'].includes(data.state))stopMicrophone('Microphone stopped because execution ended.');
  loaded=!!data.registers&&!data.error&&data.state!=='exited';
@@ -8393,7 +8573,7 @@ function fallback(){
 }
 try{
  const ids=['cia-code','arm-code','jit-code','wasm-engine-code','compression-code','firmware-code','ncch-crypto-code','loader-code','dsp-code','kernel-code','shader-code','raster-code','wasm-gpu-code','webgl-code','pica-code','scheduler-code','runtime-code','audio-code','ngword-hle-code','controller-code'];
- let poolPre='';const hwPre=!/nohwvs/.test(location.hash)?'globalThis.__HWVS=true;':'';try{if(window.crossOriginIsolated&&typeof SharedArrayBuffer!=='undefined'&&!/nopool/.test(location.hash)&&((navigator.hardwareConcurrency||4)>=4||/forcepool/.test(location.hash))){poolPre='globalThis.__VPOOL_URL='+JSON.stringify(URL.createObjectURL(new Blob([$('shader-code').textContent+'\n'+$('vpool-code').textContent],{type:'text/javascript'})))+';globalThis.VPOOL_CHECK='+(/poolcheck/.test(location.hash)?'true':'false')+';globalThis.__VPOOL_N='+(/forcepool/.test(location.hash)?2:Math.max(1,Math.min(6,(navigator.hardwareConcurrency||4)-2)))+';\n';}}catch(e){}
+ let poolPre='';const hwPre=(!/nohwvs/.test(location.hash)?'globalThis.__HWVS=true;':'')+(/gltiming/.test(location.hash)?'globalThis.__GLTIMING=true;':'');try{if(window.crossOriginIsolated&&typeof SharedArrayBuffer!=='undefined'&&!/nopool/.test(location.hash)&&((navigator.hardwareConcurrency||4)>=4||/forcepool/.test(location.hash))){poolPre='globalThis.__VPOOL_URL='+JSON.stringify(URL.createObjectURL(new Blob([$('shader-code').textContent+'\n'+$('vpool-code').textContent],{type:'text/javascript'})))+';globalThis.VPOOL_CHECK='+(/poolcheck/.test(location.hash)?'true':'false')+';globalThis.__VPOOL_N='+(/forcepool/.test(location.hash)?2:Math.max(1,Math.min(6,(navigator.hardwareConcurrency||4)-2)))+';\n';}}catch(e){}
  const source=hwPre+poolPre+ids.map(id=>$(id).textContent).join('\n')+'\nconst handle=createExecutionController((data,transfer)=>postMessage(data,transfer||[]));onmessage=event=>handle(event.data);postMessage({type:"worker-ready"});';
  workerURL=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));worker=new Worker(workerURL);
  execute=data=>{
@@ -8404,7 +8584,7 @@ try{
   else worker.postMessage(data);
  };
  worker.onmessage=e=>receive(e.data);
- worker.onerror=ev=>{const why=ev&&ev.message?ev.message:'unknown error';fallback();$('status').textContent='Worker stopped ('+why+'). Games over ~500 MB can run a phone out of memory. Cooperative execution is ready; reload your executable.';};
+ worker.onerror=ev=>{const why=ev&&ev.message?ev.message:'unknown error';fallback();log('Worker stopped: '+why+'\n');$('status').textContent='Worker stopped ('+why+'). Games over ~500 MB can run a phone out of memory. Cooperative execution is ready; reload your executable.';};
  $('host').textContent='Worker execution · no shared-memory requirement';
 }catch(e){fallback();}
 $('swkbd-form').addEventListener('submit',event=>{event.preventDefault();execute({type:'swkbd-result',text:$('swkbd-text').value,button:1});});
@@ -8491,14 +8671,17 @@ $('demo').onclick=()=>{stopMicrophone();gameSelectionNumber++;autoLaunchPending=
 $('fast-clock').addEventListener('change',()=>execute({type:'clock',multiplier:$('fast-clock').checked?4:1}));
 $('speed-limit').addEventListener('change',()=>execute({type:'speed-limit',enabled:$('speed-limit').checked}));
 $('webgl-toggle').addEventListener('change',()=>execute({type:'webgl',enabled:$('webgl-toggle').checked}));
+$('webgpu-toggle').addEventListener('change',async()=>{await WebGPUDisplay.setEnabled($('webgpu-toggle').checked);execute({type:'preview'});});
 // CPU recompiler choice: remembered on this device, applied immediately.
 {const sel=$('cpu-backend');let saved='auto';try{saved=localStorage.getItem('cpu-backend')||'auto';}catch{}
  if(sel){sel.value=['auto','wasm','js'].includes(saved)?saved:'auto';if(sel.value!=='auto')execute({type:'cpu-backend',mode:sel.value});
   sel.addEventListener('change',()=>{try{localStorage.setItem('cpu-backend',sel.value);}catch{}execute({type:'cpu-backend',mode:sel.value});});}}
 $('frame-skip').addEventListener('change',()=>execute({type:'frame-skip',enabled:$('frame-skip').checked}));
+$('mirror-bottom').addEventListener('change',()=>{mirrorBottomUI=$('mirror-bottom').checked;if(!mirrorBottomUI)topBlank=false;execute({type:'mirror-bottom',enabled:mirrorBottomUI});});
 $('run').onclick=()=>{autoLaunchPending=false;execute({type:'run'});};$('step').onclick=()=>{stopMicrophone();execute({type:'step'});};$('pause').onclick=()=>{stopMicrophone();autoLaunchPending=false;execute({type:'pause'});};
 $('copy-debug').onclick=async()=>{
- const message='3DS v0.18 · '+navigator.userAgent+'\n'+$('status').textContent+'\n'+$('log').textContent;
+ const sections=[['Status','status'],['Program','program'],['CPU engine','cpu-engine-status'],['ARM throughput','cpu-throughput'],['GPU','gpu-stats'],['3D backend','webgl-status'],['Display backend','webgpu-status'],['System archives','system-archives-status'],['Recent service totals','service-trace'],['Threads','thread-trace'],['Registers','registers'],['Guest log','log']];
+ const message='3DS Execution Lab v0.0334 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
  try{await navigator.clipboard.writeText(message);$('copy-debug').textContent='Copied!';}catch(e){
   const pad=document.createElement('textarea');pad.value=message;pad.style.cssText='position:fixed;top:20%;left:5%;width:90%;height:40%;z-index:9999;background:#111;color:white';
   document.body.appendChild(pad);pad.select();$('copy-debug').textContent='Select & copy text';
