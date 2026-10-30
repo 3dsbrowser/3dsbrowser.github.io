@@ -342,6 +342,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
     <div id="dsp-stats" class="metric" aria-live="polite">DSP not initialized</div>
     <div id="clock-status" class="metric">Normal 3DS guest timing; this option changes virtual timing, not ARM throughput.</div>
     <small id="host">Preparing local runtime…</small>
+    <div class="settings-row"><button id="copy-debug" type="button" class="outline">Copy debug log</button></div>
    </div></details>
    <details><summary>Telemetry</summary><div class="settings-content">
     <p class="metric" id="gpu-stats">No GPU commands</p>
@@ -356,7 +357,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>CPU registers</summary><div class="settings-content"><pre id="registers">No CPU state.</pre></div></details>
    <details><summary>Graphics diagnostics</summary><div class="settings-content">
     <p class="hint" style="margin-top:0">Synthetic framebuffer test; these are not actual game frames.</p>
-    <div class="settings-row"><button id="gpu-test" type="button" class="outline">Test framebuffer</button><button id="export-sources" type="button" class="ghost">Export core JS</button><button id="copy-debug" type="button" class="ghost">Copy debug log</button></div>
+    <div class="settings-row"><button id="gpu-test" type="button" class="outline">Test framebuffer</button><button id="export-sources" type="button" class="ghost">Export core JS</button></div>
     <p id="gpu-test-status" class="metric">Diagnostic not run.</p>
     <div class="diagnostics-screens"><div><small>Top LCD · synthetic</small><canvas class="diag-screen" id="screen-top" width="400" height="240"></canvas></div><div><small>Bottom LCD · synthetic</small><canvas class="diag-screen" id="screen-bottom" width="320" height="240"></canvas></div></div>
    </div></details>
@@ -524,7 +525,7 @@ class Memory{
  protect(base,size,permissions){this._mapGen=(this._mapGen|0)+1;base=U(base);this._range(base,size);if(!/^(|r|rw|rx|rwx)$/.test(permissions))throw Error('Unsupported memory permissions');for(let a=base;a<base+size;a+=4096)if(!this.pages.has(a>>>0))throw Error('Protection of unmapped memory');for(let a=base;a<base+size;a+=4096)this.pages.get(a>>>0).permissions=permissions;this.epoch++;this.mappingVersion++;if(this._jitTables)globalThis.JitARM?.syncRange(this,base,size);return this;}
  alias(dest,source,size,permissions='rw'){this._mapGen=(this._mapGen|0)+1;dest=U(dest);source=U(source);this._range(dest,size);this._range(source,size);for(let i=0;i<size;i+=4096){if(this.pages.has(U(dest+i))||!this.pages.has(U(source+i)))throw Error('Invalid alias mapping');}for(let i=0;i<size;i+=4096)this.pages.set(U(dest+i),{data:this.pages.get(U(source+i)).data,permissions,state:9});this.epoch++;this.mappingVersion++;if(this._jitTables)globalThis.JitARM?.syncRange(this,dest,size);return this;}
  isFree(base,size){if(base%4096||size%4096||!size||base+size>0x100000000)return false;for(let a=base;a<base+size;a+=4096)if(this.pages.has(a>>>0))return false;return true;}
- query(address){address=U(address);const base=address&~4095,page=this.pages.get(base);const perms=page?page.permissions:'',state=page?page.state:0;let lo=base,hi=base+4096;if(page){while(lo>=4096){const n=this.pages.get(U(lo-4096));if(!n||n.permissions!==perms||n.state!==state)break;lo-=4096;}while(hi<0x100000000){const n=this.pages.get(U(hi));if(!n||n.permissions!==perms||n.state!==state)break;hi+=4096;}}else{for(const [addr] of this.pages){if(addr<lo)lo=Math.max(lo,addr+4096);if(addr>=hi)hi=Math.min(hi,addr);}}return {base:U(lo),size:hi-lo,permissions:perms,state};}
+ query(address){address=U(address);const base=(address&~4095)>>>0,page=this.pages.get(base);const perms=page?page.permissions:'',state=page?page.state:0;let lo=page?base:0,hi=page?base+4096:0x100000000;if(page){while(lo>=4096){const n=this.pages.get(U(lo-4096));if(!n||n.permissions!==perms||n.state!==state)break;lo-=4096;}while(hi<0x100000000){const n=this.pages.get(U(hi));if(!n||n.permissions!==perms||n.state!==state)break;hi+=4096;}}else{for(const [addr] of this.pages){if(addr<base)lo=Math.max(lo,addr+4096);else if(addr>base)hi=Math.min(hi,addr);}}return {base:U(lo),size:hi-lo,permissions:perms,state};}
 
  _at(a,perm){a=U(a);let p=this.pages.get((a&~4095)>>>0);if(!p)throw Error('Unmapped memory at 0x'+a.toString(16));if(perm&&!p.permissions.includes(perm))throw Error('Memory '+perm+' permission fault at 0x'+a.toString(16));return [p.data,a&4095];}
  _align(a,n){if(a%n)throw Error('Unaligned '+n+'-byte access at 0x'+U(a).toString(16));}
@@ -3339,6 +3340,8 @@ class Kernel{
   // Bounded service-command histogram helps distinguish actual startup work
   // from repeated polling. Values are diagnostics only; they change no IPC.
   const tag=name+':0x'+head.toString(16).padStart(8,'0');
+  // Retain a short chronological trace to diagnose faults without recording file data.
+  this.recentIpc??=[];this.recentIpc.push(tag);if(this.recentIpc.length>16)this.recentIpc.shift();
   if(this.ipcCommands.has(tag)||this.ipcCommands.size<512)
    this.ipcCommands.set(tag,(this.ipcCommands.get(tag)||0)+1);
   if(name==='srv:'){
@@ -4671,8 +4674,12 @@ class Kernel{
   case 0x0b:{const t=this.getHandle(r[1]);return this.result(r,t?.type==='thread'?0:ERR,t?.type==='thread'?t.priority:0);}
   case 0x0c:{const t=this.getHandle(r[0]);if(!t||t.type!=='thread'||r[1]>63)return this.result(r,ERR);t.priority=r[1];return this.result(r);}
   case 0x11:r[0]=0;return;
-  case 0x13:return this.result(r,0,this.createHandle({type:'mutex',locked:!!r[1],owner:r[1]?this.currentThread:null}));
-  case 0x14:{const h=this.getHandle(r[0]);if(!h||h.type!=='mutex')return this.result(r,ERR);h.locked=false;h.owner=null;this.scheduler?.wakeObject(h);return this.result(r);}
+  case 0x13:{const held=!!r[1],mutex={type:'mutex',locked:held,owner:held?this.currentThread:null,lockCount:held?1:0};
+   if(held)(this.currentThread.heldMutexes??=new Set()).add(mutex);
+   return this.result(r,0,this.createHandle(mutex));}
+  case 0x14:{const h=this.getHandle(r[0]);if(!h||h.type!=='mutex'||!h.locked||h.owner!==this.currentThread)return this.result(r,ERR);
+   if(--h.lockCount===0){this.currentThread.heldMutexes?.delete(h);h.locked=false;h.owner=null;this.scheduler?.wakeObject(h);}
+   return this.result(r);}
   case 0x15:{const initial=r[1]|0,max=r[2]|0;if(initial<0||max<=0||initial>max)return this.result(r,ERR);return this.result(r,0,this.createHandle({type:'semaphore',count:initial,max}));}
   case 0x16:{const h=this.getHandle(r[1]),amount=r[2]|0;if(!h||h.type!=='semaphore'||amount<1||h.count+amount>h.max)return this.result(r,ERR);const old=h.count;h.count+=amount;this.scheduler?.wakeObject(h,{all:true});return this.result(r,0,old);}
   case 0x17:return this.result(r,0,this.createHandle({type:'event',signaled:false,reset:r[1]}));
@@ -4715,7 +4722,7 @@ class Kernel{
   case 0x23:{const h=r[0];if(!this.handles.delete(h))return this.result(r,ERR);return this.result(r);}
   case 0x24:{const obj=this.getHandle(r[0]);if(!obj)return this.result(r,ERR);
    if(obj.type==='event'&&obj.signaled){if(obj.reset===0)obj.signaled=false;return this.result(r);}
-   if(obj.type==='mutex'&&!obj.locked){obj.locked=true;obj.owner=this.currentThread;return this.result(r);}
+   if(obj.type==='mutex'&&(!obj.locked||obj.owner===this.currentThread)){this.scheduler.acquire(obj,this.currentThread);return this.result(r);}
    if(obj.type==='semaphore'&&obj.count>0){obj.count--;return this.result(r);}
    if(obj.type==='thread'&&obj.state==='exited')return this.result(r);
    if(!['event','mutex','semaphore','thread'].includes(obj.type))return this.result(r,ERR);
@@ -4729,7 +4736,7 @@ class Kernel{
    if(waitAll){
     if(this.scheduler.acquireAll(objs,this.currentThread)){r[1]=0xffffffff;return this.result(r);}
    }else{
-    const index=objs.findIndex(obj=>this.scheduler.isSignaled(obj));
+    const index=objs.findIndex(obj=>this.scheduler.isSignaled(obj,this.currentThread));
     if(index>=0){this.scheduler.acquire(objs[index],this.currentThread);r[1]=index;return this.result(r);}
    }
    const ns=BigInt.asIntN(64,(BigInt(r[5])<<32n)|BigInt(r[4]));if(ns===0n)return this.result(r,0x09401bfe);
@@ -4768,7 +4775,7 @@ class Kernel{
   default:throw Error('Unimplemented 3DS SVC 0x'+n.toString(16)+' at 0x'+cpu.pc.toString(16));
   }
  }
- statistics(){return {kernelCalls:Array.from(this.calls.entries()).map(([id,count])=>({id:'0x'+id.toString(16),count})),handleCount:this.handles.size,guestPages:this.memory.pages.size,serviceRequests:this.serviceRequests,gspTransfers:{dmaBytes:this.gsp?.dmaBytes||0,memoryFillBytes:this.gsp?.memoryFillBytes||0,displayTransfers:this.gsp?.displayTransfers||0,framebufferUpdates:this.gsp?.framebufferUpdates||0,vramSaves:this.gsp?.vramSaves||0,vramRestores:this.gsp?.vramRestores||0},topIpcCommands:[...this.ipcCommands.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([command,count])=>({command,count})),dsp:this.dsp.stats(),dspFirmwareMounted:!!this.dspFirmwareInfo,missingSystemTitles:[...(this.missingSystemTitles||[])],providedSystemTitles:[...this.systemArchives.keys()],threads:this.scheduler?.statistics()||null,hid:this.hid?{buttons:this.hid.buttons,frames:this.hid.frames,hostMessages:this.hid.hostMessages,queued:this.hostInputQueue?.length||0,pressSamples:this.hid.sampledPresses,touchSamples:this.hid.sampledTouches,touch:this.hid.touch}:null};}
+ statistics(){return {kernelCalls:Array.from(this.calls.entries()).map(([id,count])=>({id:'0x'+id.toString(16),count})),handleCount:this.handles.size,guestPages:this.memory.pages.size,serviceRequests:this.serviceRequests,gspTransfers:{dmaBytes:this.gsp?.dmaBytes||0,memoryFillBytes:this.gsp?.memoryFillBytes||0,displayTransfers:this.gsp?.displayTransfers||0,framebufferUpdates:this.gsp?.framebufferUpdates||0,vramSaves:this.gsp?.vramSaves||0,vramRestores:this.gsp?.vramRestores||0},topIpcCommands:[...this.ipcCommands.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([command,count])=>({command,count})),recentIpc:(this.recentIpc||[]).slice(),dsp:this.dsp.stats(),dspFirmwareMounted:!!this.dspFirmwareInfo,missingSystemTitles:[...(this.missingSystemTitles||[])],providedSystemTitles:[...this.systemArchives.keys()],threads:this.scheduler?.statistics()||null,hid:this.hid?{buttons:this.hid.buttons,frames:this.hid.frames,hostMessages:this.hid.hostMessages,queued:this.hostInputQueue?.length||0,pressSamples:this.hid.sampledPresses,touchSamples:this.hid.sampledTouches,touch:this.hid.touch}:null};}
 }
 return {Kernel,romfsLevel3};
 });
@@ -7608,13 +7615,13 @@ class Scheduler{
  // Wait-all acquisition is a transaction: none of the wait objects may be
  // consumed until *every* object is ready. This matters for oneshot GPU/HID
  // events and semaphore counts during game startup.
- isSignaled(obj){return obj.type==='thread'?obj.state==='exited':
-  obj.type==='event'?!!obj.signaled:obj.type==='mutex'?!obj.locked:
+ isSignaled(obj,thread){return obj.type==='thread'?obj.state==='exited':
+  obj.type==='event'?!!obj.signaled:obj.type==='mutex'?(!obj.locked||obj.owner===thread):
   obj.type==='semaphore'?obj.count>0:false;}
- canAcquireAll(objects){
+ canAcquireAll(objects,thread){
   const uses=new Map();for(const obj of objects)uses.set(obj,(uses.get(obj)||0)+1);
   for(const [obj,count] of uses){
-   if(!this.isSignaled(obj))return false;
+   if(!this.isSignaled(obj,thread))return false;
    if(obj.type==='semaphore'&&obj.count<count)return false;
    if((obj.type==='mutex'||(obj.type==='event'&&obj.reset===0))&&count>1)return false;
   }
@@ -7622,11 +7629,11 @@ class Scheduler{
  }
  acquire(obj,thread){
   if(obj.type==='event'&&obj.reset===0)obj.signaled=false;
-  else if(obj.type==='mutex'){obj.locked=true;obj.owner=thread;}
+  else if(obj.type==='mutex'){obj.locked=true;obj.owner=thread;obj.lockCount=(obj.lockCount||0)+1;(thread.heldMutexes??=new Set()).add(obj);}
   else if(obj.type==='semaphore')obj.count--;
  }
  acquireAll(objects,thread){
-  if(!this.canAcquireAll(objects))return false;
+  if(!this.canAcquireAll(objects,thread))return false;
   for(const obj of objects)this.acquire(obj,thread);
   return true;
  }
@@ -7642,7 +7649,7 @@ class Scheduler{
     if(!this.acquireAll(t.wait.objects,t))continue;
     t.cpu.regs[1]=0xffffffff; // no single winning index in wait-all mode
    }else{
-    if(!this.isSignaled(obj))break;
+    if(!this.isSignaled(obj,t))break;
     this.acquire(obj,t);
     if(t.wait?.kind==='objects')t.cpu.regs[1]=t.wait.objects.indexOf(obj);
    }
@@ -7734,7 +7741,10 @@ class Scheduler{
   this.current=last;
   return {executed,fault,halted:this.threads.every(t=>t.state==='exited'),waiting:stalled&&!this.threads.some(t=>t.state==='ready'),idleClock:stalled&&!!this.kernel.gsp?.event,reason:last?.cpu.reason??null};
  }
- notifyExit(obj){this.wakeObject(obj,{all:true});}
+ notifyExit(obj){
+  // A terminating owner cannot keep other threads blocked forever.
+  for(const mutex of obj.heldMutexes||[]){mutex.locked=false;mutex.lockCount=0;mutex.owner=null;this.wakeObject(mutex);}
+  obj.heldMutexes?.clear();this.wakeObject(obj,{all:true});}
   statistics(){
    const starvationLimit=1000000000n;
    const starved=t=>t.state==='ready'&&t.readySince!==undefined&&this.time-t.readySince>=starvationLimit&&
@@ -8161,6 +8171,20 @@ function createExecutionController(send){
   return false;
  }
 
+ // The periodic fallback must obey the same validity and backpressure rules as
+ // frame-boundary presentation, or it can expose partially skipped frames.
+ function fallbackGuestPreview(){
+  if(sentFid-ackFid>=2)return false;
+  const k=machine.kernel,xo=k?.fsXferOk;
+  if(frameSkip&&xo){
+   if(!xo.top&&!xo.bottom)return false;
+   const ok=sendGuestPreview(false,{top:xo.top?k.fsXfer.top:0,bottom:xo.bottom?k.fsXfer.bottom:0,only:true});
+   if(ok){xo.top=false;xo.bottom=false;}
+   return ok;
+  }
+  if(frameSkip&&machine.gpu?.skipRaster)return false;
+  return sendGuestPreview();
+ }
  function stop(){running=false;if(timer!==null)clearTimeout(timer);timer=null;persistSaves(machine);persistJit(machine,true);}
  function tick(){
   if(!running)return;
@@ -8171,7 +8195,7 @@ function createExecutionController(send){
    if(ahead>4){lastTickEnd=now;timer=setTimeout(tick,Math.min(16,ahead));return;}
    if(ahead<-250){paceWall=now;paceVirt=virtMs();}   // far behind: don't try to catch up in a burst
   }
-  try{let result,idle=false;const began=performance.now();try{const workerContext=typeof document==='undefined'&&typeof postMessage==='function';const sliceMs=workerContext?32:10;do{result=machine.run(65536);if(speedLimit&&(virtMs()-paceVirt)-(performance.now()-paceWall)>4)break;if(result.state==='waiting'&&machine.idleClock){idle=true;break;}if(['exited','fault','waiting'].includes(result.state)){stop();break;}}while(running&&performance.now()-began<sliceMs);}finally{perf.tick+=performance.now()-began;perfSample();}const now=Date.now();if(now-lastGuestFrame>800&&!(performance.now()-fsLastBoundaryPreview<1500)&&(machine.kernel?.gsp?.framebuffers?.top?.left||machine.kernel?.gsp?.framebuffers?.bottom?.left||machine.gpu?.rasterizedDraws>lastGuestDraw)){if(sendGuestPreview()){lastGuestFrame=now;lastGuestDraw=machine.gpu.rasterizedDraws;}}maybePersist();if(!running||now-lastReport>250){lastReport=now;post();}lastTickEnd=performance.now();if(running)timer=setTimeout(tick,idle?16:0);}
+  try{let result,idle=false;const began=performance.now();try{const workerContext=typeof document==='undefined'&&typeof postMessage==='function';const sliceMs=workerContext?32:10;do{result=machine.run(65536);if(speedLimit&&(virtMs()-paceVirt)-(performance.now()-paceWall)>4)break;if(result.state==='waiting'&&machine.idleClock){idle=true;break;}if(['exited','fault','waiting'].includes(result.state)){stop();break;}}while(running&&performance.now()-began<sliceMs);}finally{perf.tick+=performance.now()-began;perfSample();}const now=Date.now();if(now-lastGuestFrame>800&&!(performance.now()-fsLastBoundaryPreview<1500)&&(machine.kernel?.gsp?.framebuffers?.top?.left||machine.kernel?.gsp?.framebuffers?.bottom?.left||machine.gpu?.rasterizedDraws>lastGuestDraw)){if(fallbackGuestPreview()){lastGuestFrame=now;lastGuestDraw=machine.gpu.rasterizedDraws;}}maybePersist();if(!running||now-lastReport>250){lastReport=now;post();}lastTickEnd=performance.now();if(running)timer=setTimeout(tick,idle?16:0);}
   catch(e){stop();send({type:'error',message:e.message});post();}
  }
  return async function handle(data){
@@ -8358,8 +8382,17 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
   }
   }
 }
-let detailAt=0;
+let detailAt=0,lastReportedFault=null;
 function handleState(data){
+ // Put actionable context into the existing Copy debug log, once per failure.
+ if(data.state==='fault'&&data.error&&lastReportedFault!==data.error){
+  lastReportedFault=data.error;
+  const pc=data.registers?.[15],thread=data.kernel?.threads?.activeThreadId;
+  log('\nExecution fault: '+data.error+'\nInstruction count: '+(data.instructions??'unknown')+
+      '\nRegister PC: '+(pc==null?'unknown':'0x'+(pc>>>0).toString(16).padStart(8,'0'))+
+      '\nActive thread: '+(thread??'unknown')+'\nRecent IPC: '+((data.kernel?.recentIpc||[]).join(' → ')||'none')+'\n');
+ }
+ if(data.state==='ready')lastReportedFault=null;
  if(typeof data.gameFrames==='number')fpsGameFrames=data.gameFrames;if(data.perf)fpsPerf=data.perf;
  if(['fault','exited','blocked'].includes(data.state))stopMicrophone('Microphone stopped because execution ended.');
  loaded=!!data.registers&&!data.error&&data.state!=='exited';
@@ -8409,7 +8442,7 @@ try{
   else worker.postMessage(data);
  };
  worker.onmessage=e=>receive(e.data);
- worker.onerror=ev=>{const why=ev&&ev.message?ev.message:'unknown error';fallback();$('status').textContent='Worker stopped ('+why+'). Games over ~500 MB can run a phone out of memory. Cooperative execution is ready; reload your executable.';};
+ worker.onerror=ev=>{const why=ev&&ev.message?ev.message:'unknown error';fallback();log('Worker stopped: '+why+'\n');$('status').textContent='Worker stopped ('+why+'). Games over ~500 MB can run a phone out of memory. Cooperative execution is ready; reload your executable.';};
  $('host').textContent='Worker execution · no shared-memory requirement';
 }catch(e){fallback();}
 $('swkbd-form').addEventListener('submit',event=>{event.preventDefault();execute({type:'swkbd-result',text:$('swkbd-text').value,button:1});});
@@ -8503,7 +8536,8 @@ $('webgl-toggle').addEventListener('change',()=>execute({type:'webgl',enabled:$(
 $('frame-skip').addEventListener('change',()=>execute({type:'frame-skip',enabled:$('frame-skip').checked}));
 $('run').onclick=()=>{autoLaunchPending=false;execute({type:'run'});};$('step').onclick=()=>{stopMicrophone();execute({type:'step'});};$('pause').onclick=()=>{stopMicrophone();autoLaunchPending=false;execute({type:'pause'});};
 $('copy-debug').onclick=async()=>{
- const message='3DS v0.18 · '+navigator.userAgent+'\n'+$('status').textContent+'\n'+$('log').textContent;
+ const sections=[['Status','status'],['Program','program'],['CPU engine','cpu-engine-status'],['ARM throughput','cpu-throughput'],['GPU','gpu-stats'],['System archives','system-archives-status'],['Recent service totals','service-trace'],['Threads','thread-trace'],['Registers','registers'],['Guest log','log']];
+ const message='3DS Execution Lab v0.0329 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
  try{await navigator.clipboard.writeText(message);$('copy-debug').textContent='Copied!';}catch(e){
   const pad=document.createElement('textarea');pad.value=message;pad.style.cssText='position:fixed;top:20%;left:5%;width:90%;height:40%;z-index:9999;background:#111;color:white';
   document.body.appendChild(pad);pad.select();$('copy-debug').textContent='Select & copy text';
