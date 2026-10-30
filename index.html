@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0330 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0331 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -215,7 +215,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
 </style></head><body data-view="library" data-sheet="">
 <main class="library" id="library" aria-label="Game library">
  <header class="appbar">
-  <h1>3DBS - v0.0330</h1>
+  <h1>3DBS - v0.0331</h1>
   <button type="button" class="icon" data-open-settings aria-label="Open settings" aria-haspopup="dialog" title="Settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
  </header>
  <section class="lib-section" aria-labelledby="games-title">
@@ -291,6 +291,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
   <label class="toggle-row"><span>CPU recompiler<small>Auto uses WebAssembly (much faster); JavaScript is the fallback</small></span><select id="cpu-backend" aria-label="CPU recompiler"><option value="auto">Auto</option><option value="wasm">WebAssembly</option><option value="js">JavaScript</option></select></label>
   <label class="toggle-row"><span>GPU rendering (WebGL)<small id="webgl-status">Draw with the graphics card; falls back to software</small></span><input id="webgl-toggle" type="checkbox" checked></label>
   <label class="toggle-row"><span>Auto frame skip<small>Only draw the frames that are shown (about 15 per second)</small></span><input id="frame-skip" type="checkbox" checked></label>
+  <label class="toggle-row"><span>Mirror bottom screen when top is blank<small>Turn off to avoid GPU screen-detection checks</small></span><input id="mirror-bottom" type="checkbox" checked></label>
   <div class="menu-info">
    <p><span id="guest-preview-status">Waiting for guest framebuffer.</span></p>
    <p>Screen: <span id="live-screen-name">AUTO DISPLAY</span></p>
@@ -323,7 +324,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0330 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0331 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -6542,7 +6543,7 @@ function displayTransfer(m,src,dst,sw,sh,dw,dh,srcFmt,dstFmt,flags){gcReset();
 // the GPU). Screen i occupies x = i*256, rows 0..h-1 of the bitmap, with image
 // row y = LCD memory row y (the same layout decodeFramebuffer produces).
 // list: [{addr,w,h,fmt,stride}] -> {bitmap,shown:[bool]} or null.
-function present(m,list){gcReset();
+function present(m,list,detectTop=true){gcReset();
  if(!gl||!enabled)return null;const c=gl.canvas;if(!c||typeof c.transferToImageBitmap!=='function')return null;
  const W=512,H=512;let any=false;const shown=[];
  for(let i=0;i<list.length;i++){const q=list[i],l=lcds.get(q.addr>>>0);
@@ -6554,7 +6555,7 @@ function present(m,list){gcReset();
   if(l.flip)gl.blitFramebuffer(0,0,w,h,x,H-h,x+w,H,gl.COLOR_BUFFER_BIT,gl.NEAREST);
   else gl.blitFramebuffer(0,0,w,h,x,H,x+w,H-h,gl.COLOR_BUFFER_BIT,gl.NEAREST);}
  if(!any)return null;
- const topLit=litProbe(list[0],shown[0]);
+ const topLit=detectTop?litProbe(list[0],shown[0]):true;
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
  gl.colorMask(false,false,false,true);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.colorMask(true,true,true,true);
  stats.presents=(stats.presents|0)+1;
@@ -6744,10 +6745,10 @@ function tevGLSL(g,light){
  const comb=(mode,a,b,c)=>{switch(mode){case 0:return a;case 1:return '('+a+'*'+b+'/255.0)';case 2:return '('+a+'+'+b+')';
   case 3:return '('+a+'+'+b+'-128.0)';case 4:return '(('+a+'*'+c+'+'+b+'*(255.0-'+c+'))/255.0)';case 5:return '('+a+'-'+b+')';
   case 8:return '('+a+'*'+b+'/255.0+'+c+')';case 9:return '(min('+a+'+'+b+',255.0)*'+c+'/255.0)';default:return a;}};
- let code='vec4 prev=prim;vec4 pbuf=vec4(0.0),nbuf=vec4('+lit(bc&255)+','+lit((bc>>>8)&255)+','+lit((bc>>>16)&255)+','+lit(bc>>>24)+');';
+ let code='vec4 prev=prim;vec4 pbuf=vec4(0.0),nbuf=uBuf;';
  for(const s of live){const k=s.k,c=s.constant;
   if(!s.pass){
-   code+='{const vec4 C'+k+'=vec4('+lit(c&255)+','+lit((c>>>8)&255)+','+lit((c>>>16)&255)+','+lit(c>>>24)+');';
+   code+='{vec4 C'+k+'=uC'+k+';';
    const r=[0,1,2].map(j=>srcExpr((s.src>>>(4*j))&15,k)),a=[0,1,2].map(j=>srcExpr((s.src>>>(16+4*j))&15,k));
    const ro=[s.operand&15,(s.operand>>>4)&15,(s.operand>>>8)&15],ao=[(s.operand>>>12)&7,(s.operand>>>16)&7,(s.operand>>>20)&7];
    const rm=s.comb&15,am=(s.comb>>>16)&15,rs=1<<Math.min(2,s.scale&3),as=1<<Math.min(2,(s.scale>>>16)&3);
@@ -6763,7 +6764,7 @@ function tevGLSL(g,light){
   if(k<4){code+='pbuf=nbuf;';if(updRGB&(1<<k))code+='nbuf.rgb=prev.rgb;';if(updA&(1<<k))code+='nbuf.a=prev.a;';}}
  return code+'vec4 res=prev;';}
 function alphaGLSL(g){const at=g.regs[0x104]>>>0;if(!(at&1))return '';
- const ref=lit((at>>>8)&255),fn=(at>>>4)&7;
+ const ref='uAlphaRef',fn=(at>>>4)&7;
  const cond=[ 'false','true','res.a=='+ref,'res.a!='+ref,'res.a<'+ref,'res.a<='+ref,'res.a>'+ref,'res.a>='+ref][fn];
  return 'if(!('+cond+'))discard;';}
 function fragmentSource(g,light){
@@ -6774,6 +6775,7 @@ function fragmentSource(g,light){
 precision highp float;precision highp int;precision highp sampler2D;
 in vec4 vCol;in vec2 vUV;in vec2 vUV1;in vec2 vUV2;in vec4 vNQ;in vec3 vView;out vec4 oCol;
 uniform sampler2D uTex;uniform sampler2D uTex1;uniform sampler2D uTex2;uniform sampler2D uLut;
+uniform vec4 uC0,uC1,uC2,uC3,uC4,uC5,uBuf;uniform float uAlphaRef;
 uniform ivec2 uSize;uniform ivec2 uWrap;uniform vec4 uBorder;
 uniform ivec2 uSize1;uniform ivec2 uWrap1;uniform vec4 uBorder1;
 uniform ivec2 uSize2;uniform ivec2 uWrap2;uniform vec4 uBorder2;
@@ -7024,14 +7026,17 @@ function hwDraw(g,p,D,shader){
  stats.hwDraws=(stats.hwDraws|0)+1;stats.hwVerts=(stats.hwVerts|0)+D.cnt;}
 const progKeys=new Map();
 function programFor(g,light,hwd){const R=g.regs;let hA=0x811c9dc5,hB=0x9e3779b9;
- for(let i=0xc0;i<0x100;i++){const x=R[i]|0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
- const ck=(R[0x80]&0x3007)+'|'+(R[0x104]>>>0)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
+ // Constant colours and alpha reference are uniforms, so only preserve the
+ // zero/nonzero distinction needed by stageInfo's empty-stage rule in the key.
+ for(let i=0xc0;i<0x100;i++){let x=R[i]|0;if(i===0xfd)x=0;else if(i===0xc3||i===0xcb||i===0xd3||i===0xdb||i===0xf3||i===0xfb)x=x?1:0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
+ const ck=(R[0x80]&0x3007)+'|'+(R[0x104]&0x71)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
  let p=progKeys.get(ck);if(p)return p;
  if(hwd){const u=(HW.uses.get(ck)|0)+1;if(HW.uses.size>4096)HW.uses.clear();HW.uses.set(ck,u);if(u<HW.PROMOTE)return null;if(HW.pend.size>=HW.MAXPEND){for(const q of [...HW.pend])progReady(q);if(HW.pend.size>=HW.MAXPEND)return null;}}
  p=programForSlow(g,light,hwd);if(progKeys.size>2048)progKeys.clear();progKeys.set(ck,p);return p;}
 let vsObj=null,PSC;
 function progUniforms(p){if(p.isHW)hwUniforms(p);const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);
  p.uTex=[U('uTex'),U('uTex1'),U('uTex2')];p.uSize=[U('uSize'),U('uSize1'),U('uSize2')];p.uWrap=[U('uWrap'),U('uWrap1'),U('uWrap2')];p.uBorder=[U('uBorder'),U('uBorder1'),U('uBorder2')];
+ p.uConst=[0,1,2,3,4,5].map(i=>U('uC'+i));p.uBuf=U('uBuf');p.uAlphaRef=U('uAlphaRef');
  p.uLut=U('uLut');p.uLPos=U('uLPos');p.uLS0=U('uLS0');p.uLS1=U('uLS1');p.uLDif=U('uLDif');p.uLAmb=U('uLAmb');p.uLSpot=U('uLSpot');p.uLDA=U('uLDA');p.uLGAmb=U('uLGAmb');}
 // Shader compiles can take 100 ms-seconds each on desktop drivers (ANGLE/D3D). With KHR_parallel_shader_compile they
 // run on driver threads; a draw whose program is not ready yet is skipped instead of stalling the whole emulator.
@@ -7338,6 +7343,12 @@ function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,src
    gl.blendEquationSeparate(E[eqRgb],E[eqA]);gl.blendFuncSeparate(F[srcRgb],F[dstRgb],F[srcA],F[dstA]);
    gl.blendColor((bc&255)/255,((bc>>>8)&255)/255,((bc>>>16)&255)/255,(bc>>>24)/255);}
    else gl.disable(gl.BLEND);GC.bl=bk;}}
+ // Shader constants vary per draw. Uniform changes flush queued vertices first,
+ // so batches always use the values that were active when they were submitted.
+ {const ids=[0xc3,0xcb,0xd3,0xdb,0xf3,0xfb],old=p.cv||(p.cv=[]);
+  for(let i=0;i<6;i++){const v=g.regs[ids[i]]>>>0,loc=p.uConst[i];if(loc!==null&&old[i]!==v){FL();old[i]=v;gl.uniform4f(loc,v&255,(v>>>8)&255,(v>>>16)&255,v>>>24);}}
+  const v=g.regs[0xfd]>>>0;if(p.uBuf!==null&&p.bv!==v){FL();p.bv=v;gl.uniform4f(p.uBuf,v&255,(v>>>8)&255,(v>>>16)&255,v>>>24);}
+  const ref=(g.regs[0x104]>>>8)&255;if(p.uAlphaRef!==null&&p.av!==ref){FL();p.av=ref;gl.uniform1f(p.uAlphaRef,ref);}}
  const T=GC.tx||(GC.tx=[null,null,null,null,null]);
  for(let u=0;u<3;u++){const t=tex[u];
   if(t){if(T[u]!==t.tex){FL();gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,t.tex);T[u]=t.tex;}
@@ -8045,7 +8056,7 @@ function createExecutionController(send){
  // not rasterized at all (the game logic still runs every frame), which is where
  // most of the time went: the old preview showed one frame per 800 ms but
  // rasterized every frame.
- let webglWanted=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;let fsMul=3,fsCtlT=0;
+ let webglWanted=true,mirrorBottom=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;let fsMul=3,fsCtlT=0;
  let gameFrames=0,previewsSent=0,sentFid=0,ackFid=0;
  // Frames reach the page either as a GPU ImageBitmap ('bitmap') or by reading
  // the pixels back ('readback'). Which is faster depends on the device, so the
@@ -8184,7 +8195,7 @@ function createExecutionController(send){
    const list=[['top',400],['bottom',320]];let done=[false,false];
    if(typeof PICAWebGL!=='undefined'&&PICAWebGL.active&&PM.mode==='bitmap'){
     const q=list.map(([screen,height])=>{const d=screens[screen];if(targets?.only&&!targets[screen])return {addr:-1,w:0,h:0,fmt:-1};return d&&d.left?{addr:(targets&&targets[screen])||d.left,w:240,h:height,fmt:d.format&7,stride:d.stride|0}:{addr:-1,w:0,h:0,fmt:-1};});
-    const r=PICAWebGL.present(machine.memory,q);
+    const r=PICAWebGL.present(machine.memory,q,mirrorBottom);
     if(r){done=r.shown;sentFid=fid;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
    }
    for(let si=0;si<list.length;si++){const [screen,height]=list[si];if(done[si])continue;
@@ -8308,6 +8319,7 @@ function createExecutionController(send){
     const parsed=Local3DSAssets.parseKeyBundle(data.text);keyring=parsed.titleKeys;aesKeyring=parsed.aesKeys;send({type:'asset-status',asset:'keys',text:keyring.size+' title keys and '+aesKeyring.size+' Azahar AES entries loaded locally (no key values displayed). NCCH AES-CTR decryption available; seed-encrypted titles require seeddb.bin.'});
    }else if(data.type==='cpu-backend'){if(typeof JitARM!=='undefined'&&JitARM.setBackend)JitARM.setBackend(data.mode);
    }else if(data.type==='webgl'){webglWanted=!!data.enabled;if(typeof PICAWebGL!=='undefined'){if(webglWanted)PICAWebGL.init();PICAWebGL.enabled=webglWanted;}send({type:'webgl-status',available:typeof PICAWebGL!=='undefined'&&PICAWebGL.available,error:typeof PICAWebGL!=='undefined'?PICAWebGL.error:'missing'});
+   }else if(data.type==='mirror-bottom'){mirrorBottom=!!data.enabled;
    }else if(data.type==='frame-skip'){frameSkip=!!data.enabled;if(!frameSkip){fsRender=true;if(machine.gpu)machine.gpu.skipRaster=false;}
    }else if(data.type==='speed-limit'){speedLimit=!!data.enabled;paceWall=performance.now();paceVirt=virtMs();
    }else if(data.type==='clock'){
@@ -8350,7 +8362,7 @@ function createExecutionController(send){
 'use strict';
 const $=id=>document.getElementById(id);
 let execute,worker,workerURL,loaded=false,autoLaunchPending=false;
-const logs=[];let logSize=0;let topBlank=true;let rateMark=0,rateInstructions=0,armIps=0;
+const logs=[];let logSize=0;let topBlank=true,mirrorBottomUI=true;let rateMark=0,rateInstructions=0,armIps=0;
 const statuses={empty:'Choose a file or load the included test.',ready:'Executable loaded. Ready to execute.',paused:'Paused.',waiting:'All guest threads waiting on synchronization.',exited:'Process exited.',fault:'Execution stopped on an unsupported operation or fault.',blocked:'File could not be executed.'};
 function log(text){logs.push(text);logSize+=text.length;while(logSize>20000&&logs.length>1)logSize-=logs.shift().length;$('log').textContent=logs.join('');}
 function receive(data){
@@ -8420,7 +8432,7 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
    // GPU bitmaps are never read back here (that would stall the page on the
    // GPU); the worker reports whether the top screen has content.
    if(bmp&&typeof data.topLit==='boolean')topBlank=!data.topLit;
-   if(pixels){let lit=0;const step=4*53;for(let i=0;i<pixels.length;i+=step){if(pixels[i]>15||pixels[i+1]>15||pixels[i+2]>15){if(++lit>=3)break;}}
+   if(pixels&&mirrorBottomUI){let lit=0;const step=4*53;for(let i=0;i<pixels.length;i+=step){if(pixels[i]>15||pixels[i+1]>15||pixels[i+2]>15){if(++lit>=3)break;}}
    topBlank=lit<3;}
    if(!topBlank){
     canvas.classList.remove('bottom-mirror');$('live-screen-name').textContent='TOP LCD';
@@ -8582,10 +8594,11 @@ $('webgl-toggle').addEventListener('change',()=>execute({type:'webgl',enabled:$(
  if(sel){sel.value=['auto','wasm','js'].includes(saved)?saved:'auto';if(sel.value!=='auto')execute({type:'cpu-backend',mode:sel.value});
   sel.addEventListener('change',()=>{try{localStorage.setItem('cpu-backend',sel.value);}catch{}execute({type:'cpu-backend',mode:sel.value});});}}
 $('frame-skip').addEventListener('change',()=>execute({type:'frame-skip',enabled:$('frame-skip').checked}));
+$('mirror-bottom').addEventListener('change',()=>{mirrorBottomUI=$('mirror-bottom').checked;if(!mirrorBottomUI)topBlank=false;execute({type:'mirror-bottom',enabled:mirrorBottomUI});});
 $('run').onclick=()=>{autoLaunchPending=false;execute({type:'run'});};$('step').onclick=()=>{stopMicrophone();execute({type:'step'});};$('pause').onclick=()=>{stopMicrophone();autoLaunchPending=false;execute({type:'pause'});};
 $('copy-debug').onclick=async()=>{
  const sections=[['Status','status'],['Program','program'],['CPU engine','cpu-engine-status'],['ARM throughput','cpu-throughput'],['GPU','gpu-stats'],['System archives','system-archives-status'],['Recent service totals','service-trace'],['Threads','thread-trace'],['Registers','registers'],['Guest log','log']];
- const message='3DS Execution Lab v0.0330 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
+ const message='3DS Execution Lab v0.0331 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
  try{await navigator.clipboard.writeText(message);$('copy-debug').textContent='Copied!';}catch(e){
   const pad=document.createElement('textarea');pad.value=message;pad.style.cssText='position:fixed;top:20%;left:5%;width:90%;height:40%;z-index:9999;background:#111;color:white';
   document.body.appendChild(pad);pad.select();$('copy-debug').textContent='Select & copy text';
