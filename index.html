@@ -4428,7 +4428,7 @@ class Kernel{
    }
    if(id===0){ // DMA: guest address-space byte copy.
     const [src,dst,length]=[w[1],w[2],w[3]];
-    check(src,length,'r');check(dst,length,'w');const GLX=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;GLX?.flushRange(mem,src,length);GLX?.invalidateRange(mem,dst,length);
+    check(src,length,'r');check(dst,length,'w');const GLX=typeof PICAWebGL!=='undefined'&&PICAWebGL.active?PICAWebGL:null;GLX?.flushRange(mem,src,length);GLX?.invalidateRange(mem,dst,length,true);
     // Source and destination spans have been fully permission-checked above.
     // Snapshot before writing, preserving DMA semantics for overlapping ranges.
     // Cache each guest page instead of doing one Map lookup and permission
@@ -6440,8 +6440,15 @@ function readback(rt){gcReset();if(stats.rbTrace){const k=(new Error().stack||''
 function flushRange(m,addr,len){if(!gl)return;for(const rt of rts.values())if(rt.gpuDirty&&rt.mem===m&&overlaps(rt.addr,rt.len,addr>>>0,len))readback(rt);
  for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,addr>>>0,len))materialize(l);}
 // Something is about to write [addr,addr+len): keep GPU-only pixels, then let memory win.
-function invalidateRange(m,addr,len){if(!gl)return;for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,addr>>>0,len))materialize(l);for(const rt of rts.values())if(rt.mem===m&&overlaps(rt.addr,rt.len,addr>>>0,len)){if(rt.gpuDirty)readback(rt);rt.memStale=true;}
- for(const [k,t] of textures)if(t.mem===m&&overlaps(t.base,t.len,addr>>>0,len))t.checked=-1,t.vf=-1e9;}
+function invalidateRange(m,addr,len,wholeOverwrite=false){if(!gl)return;addr>>>=0;
+ // A proven contiguous overwrite of the entire target makes its old GPU data
+ // irrelevant. Partial/strided writes must preserve the untouched bytes.
+ const covered=(base,size)=>wholeOverwrite&&addr<=base&&addr+len>=base+size;
+ for(const l of lcds.values())if(l.pending&&l.mem===m&&overlaps(l.dst,l.len,addr,len)){
+  if(covered(l.dst,l.len)){l.pending=false;stats.discardedReadbacks=(stats.discardedReadbacks|0)+1;}else materialize(l);}
+ for(const rt of rts.values())if(rt.mem===m&&overlaps(rt.addr,rt.len,addr,len)){
+  if(rt.gpuDirty){if(covered(rt.addr,rt.len)){rt.gpuDirty=false;stats.discardedReadbacks=(stats.discardedReadbacks|0)+1;}else readback(rt);}rt.memStale=true;}
+ for(const [k,t] of textures)if(t.mem===m&&overlaps(t.base,t.len,addr,len))t.checked=-1,t.vf=-1e9;}
 // GX MemoryFill about to write [base,end) with a repeated value. A 32-bit fill
 // that covers a whole GPU-held target is mirrored with glClear (bytes A,B,G,R
 // per pixel in memory -> clear colour R,G,B,A), so the target stays valid on
@@ -6535,7 +6542,7 @@ function litProbe(q,shownTop){gcReset();
    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,l.fbo);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,LIT.fbo);
    gl.blitFramebuffer(0,0,l.w,l.h,0,0,24,40,gl.COLOR_BUFFER_BIT,gl.NEAREST);
    gl.bindFramebuffer(gl.FRAMEBUFFER,LIT.fbo);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,LIT.pbo);
-   gl.readPixels(0,0,24,40,gl.RGBA,gl.UNSIGNED_BYTE,0);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
+   gl.readPixels(0,0,24,40,gl.RGBA,gl.UNSIGNED_BYTE,0);stats.litReads=(stats.litReads|0)+1;gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
    LIT.sync=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);gl.flush();}
  }catch(e){}
  return LIT.value;}
@@ -6873,7 +6880,7 @@ function picaToGlsl(code, descs, entry){
 // ---------------------------------------------------------------- GPU-side vertex shading (#hwvs)
 // The PICA vertex shader is translated to GLSL once per program; vertex attributes are uploaded as raw guest bytes and
 // fetched by the GPU (vertexAttribPointer does the byte/short/float decoding). No per-vertex JavaScript.
-const HW={uses:new Map(),pend:new Set(),PROMOTE:8,MAXPEND:1,on:!!globalThis.__HWVS,bad:new Set(),gen:new Map(),vso:new Map(),lastVer:-1,lastKey:'',lastEntry:-1,lastCode:null,ready:false,en:0,
+const HW={uses:new Map(),pend:new Set(),PROMOTE:8,MAXPEND:1,nextCompile:0,on:!!globalThis.__HWVS,bad:new Set(),gen:new Map(),vso:new Map(),lastVer:-1,lastKey:'',lastEntry:-1,lastCode:null,ready:false,en:0,
  buf:new Uint8Array(1<<16),i16:new Uint16Array(3*4096),iv:new Int32Array(16),sem:new Int8Array(24)};
 const HW_HEAD=`#version 300 es
 precision highp float;precision highp int;
@@ -6992,13 +6999,16 @@ function progUniforms(p){if(p.isHW)hwUniforms(p);const pr=p.pr,U=n=>gl.getUnifor
 // Shader compiles can take 100 ms-seconds each on desktop drivers (ANGLE/D3D). With KHR_parallel_shader_compile they
 // run on driver threads; a draw whose program is not ready yet is skipped instead of stalling the whole emulator.
 function progReady(p){if(!p.pending)return true;
- {const t=performance.now();if(t-(p.poll||0)<6)return false;p.poll=t;}
+ {const t=performance.now();if(p.poll!==undefined&&t-p.poll<(p.isHW?250:6))return false;p.poll=t;}
  if(!gl.getProgramParameter(p.pr,PSC.COMPLETION_STATUS_KHR)){stats.deferredDraws=(stats.deferredDraws|0)+1;return false;}
  p.pending=false;HW.pend.delete(p);globalThis.__HWPEND=HW.pend.size;
  if(!gl.getProgramParameter(p.pr,gl.LINK_STATUS))p.failed='WebGL link: '+gl.getProgramInfoLog(p.pr)+' '+(gl.getShaderInfoLog(p.fsh)||'');
  else progUniforms(p);
  return true;}
 function programForSlow(g,light,hwd){const fs0=fragmentSource(g,light),fs=hwd?fs0+'\n//HW '+hwd.vkey:fs0;let p=programs.get(fs);if(p)return p;
+ // Some mobile drivers block even on completion queries or synchronous linking.
+ // Keep using the existing CPU-vertex path while rate-limiting promotions.
+ if(hwd){const now=performance.now();if(now<HW.nextCompile)return null;HW.nextCompile=now+500;}
  if(PSC===undefined)PSC=gl.getExtension('KHR_parallel_shader_compile')||null;
  if(PSC){
   if(!vsObj){vsObj=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(vsObj,VS);gl.compileShader(vsObj);}
@@ -8032,6 +8042,7 @@ function createExecutionController(send){
    gl:typeof PICAWebGL!=='undefined'&&PICAWebGL.active,track:!(gs.trackOff),jit:typeof JitARM==='undefined'?'none':(JitARM.available?(JitARM.backend==='wasm'?'WASM JIT'+(globalThis.__ARENA_SHARED?' (shared mem)':''):'JS JIT'):'interpreter'),jitPct:Math.round(((JitARM?.stats?.instructions||0)-(perf.j0||0))*100/Math.max(1,(perf.ins1-(perf.ins0||0)))),compMs:Math.round(((JitARM?.stats?.compileMs||0)-(perf.c0||0))*1000/dt),mips:Math.round((perf.ins1-(perf.ins0||0))/dt/1000),idle:Math.max(0,Math.round((dt-perf.tick)/dt*100))};
   {const T=gs.glT||{};const P0=perf.g0||{};const arr=[];for(const k in T){if(k[0]==='#')continue;const d=T[k]-(P0[k]||0);if(d>=1)arr.push([k,d,(T['#'+k]|0)-(P0['#'+k]|0)]);}
    arr.sort((a,b)=>b[1]-a[1]);{const ph=(k)=>Math.round(((gs[k]||0)-(perf[k+'0']||0))*100/dt);perf.last.ph='vert '+ph('msVert')+'% · tex '+ph('msTex')+'% · drawGL '+ph('msGL')+'% · draws '+((gs.draws|0)-(perf.dr0|0))+' · pool '+(gs.vpDraws|0)+(gs.vpBad?' BAD '+gs.vpBad:'')+'<br>pool: fetch '+ph('vpFetch')+'% · wait '+ph('vpWait')+'% · copy '+ph('vpCopy')+'% · '+Math.round(((gs.vpVerts|0)-(perf.vv0|0))/(dt/1000))+' verts/s ×'+(globalThis.__VPOOL_N||0)+(globalThis.__HWVS?' · HW '+(gs.hwDraws|0)+' draws'+(gs.hwErr?' ERR '+gs.hwErr.slice(0,80):'')+(gs.hwWhy?' why '+gs.hwWhy:''):' · HW off');perf.last.ph+='<br>frames '+((gs.fsB|0)-(perf.fb0|0))+' · rendered '+((gs.fsR|0)-(perf.fr0|0))+' · attempts '+((gs.fsAtt|0)-(perf.fa0|0))+' · ok '+((gs.fsOk|0)-(perf.fo0|0))+' · ack '+sentFid+'/'+ackFid+' · interval '+(gs.fsDbg?gs.fsDbg[1]:0)+' ms · cost '+(gs.fsDbg?gs.fsDbg[0]:0)+' ms';perf.fb0=gs.fsB|0;perf.fr0=gs.fsR|0;perf.fa0=gs.fsAtt|0;perf.fo0=gs.fsOk|0;
+   perf.last.ph+='<br>readbacks: RT '+((gs.rtReadbacks|0)-(perf.rb0|0))+' · LCD '+((gs.lcdReadbacks|0)-(perf.lb0|0))+' · probe '+((gs.litReads|0)-(perf.lr0|0))+' · avoided '+((gs.discardedReadbacks|0)-(perf.rd0|0));perf.rb0=gs.rtReadbacks|0;perf.lb0=gs.lcdReadbacks|0;perf.lr0=gs.litReads|0;perf.rd0=gs.discardedReadbacks|0;
    perf.vpFetch0=gs.vpFetch||0;perf.vpWait0=gs.vpWait||0;perf.vpCopy0=gs.vpCopy||0;perf.vv0=gs.vpVerts|0;perf.msVert0=gs.msVert||0;perf.msTex0=gs.msTex||0;perf.msGL0=gs.msGL||0;perf.dr0=gs.draws|0;}
    perf.last.glTop=arr.slice(0,4).map(a=>a[0]+' '+Math.round(a[1]*1000/dt)/10+'% x'+a[2]).join(' · ');perf.g0=Object.assign({},T);}
   perf.tick=0;perf.prev=0;perf.prevN=0;perf.d0=gs.drawMs||0;perf.t0=now;perf.ins0=perf.ins1;perf.j0=JitARM?.stats?.instructions||0;perf.c0=JitARM?.stats?.compileMs||0;}
