@@ -3382,6 +3382,9 @@ class Kernel{
    if(head===0x00090000)return value(0);   // GetPedometerState: not counting
    if(head===0x000c0000)return value(0);   // GetTotalStepCount
    if(head===0x000e0000)return value(0);   // GetPedometerRecordingMode
+   // ConfigureNew3DSCPU: accept the request without changing the emulated clock.
+   // Protocol behavior adapted from Panda3DS PTMService; see THIRD_PARTY_NOTICES.md.
+   if(head===0x08180040){mem.write32(cmdAt,reply(cmd,1));mem.write32(cmdAt+4,0);return;}
    if(head===0x000b00c2||head===0x000f0084){ // GetStepHistory / GetStepHistoryAll: no steps
     const words=head===0x000b00c2?[mem.read32(cmdAt+16),mem.read32(cmdAt+20)]:[mem.read32(cmdAt+20),mem.read32(cmdAt+24)];
     const size=words[0]>>>4,ptr=words[1];if(size>0x100000)throw Error('ptm:u step history buffer too large');
@@ -6329,13 +6332,16 @@ function pageWrite(m,addr,src,len){
   if(!p||!p.permissions.includes('w'))throw Error('WebGL readback target not writable at 0x'+a.toString(16));
   const o=a&4095,n=Math.min(len-i,4096-o);p.data.set(src.subarray(i,i+n),o);i+=n;}
  m.epoch++;}
-function sameAsPages(m,addr,len,raw,step=1){
- if((addr&3)||(len&3)||(raw.byteOffset&3))return false;
- const r32=new Uint32Array(raw.buffer,raw.byteOffset,len>>2);
+function sameAsPages(m,addr,len,raw){
+ // Compare every byte, including unaligned and short texture formats.
+ if(raw.length<len)return false;
  for(let i=0;i<len;){const a=(addr+i)>>>0,p=m.pages.get((a&~4095)>>>0);if(!p||!p.permissions.includes('r'))return false;
-  const o=a&4095,n=Math.min(len-i,4096-o),d=p.data;if((d.byteOffset+o)&3)return false;
-  const v=new Uint32Array(d.buffer,d.byteOffset+o,n>>2),k0=i>>2;
-  for(let k=0;k<v.length;k+=step)if(v[k]!==r32[k0+k])return false;
+  const o=a&4095,n=Math.min(len-i,4096-o),d=p.data;let k=0;
+  if(!((d.byteOffset+o)&3)&&!((raw.byteOffset+i)&3)){
+   const count=n>>>2,v=new Uint32Array(d.buffer,d.byteOffset+o,count),r=new Uint32Array(raw.buffer,raw.byteOffset+i,count);
+   for(let j=0;j<count;j++)if(v[j]!==r[j])return false;k=count*4;
+  }
+  for(;k<n;k++)if(d[o+k]!==raw[i+k])return false;
   i+=n;}
  return true;}
 const overlaps=(a0,l0,a1,l1)=>a0<a1+l1&&a1<a0+l0;
@@ -6569,7 +6575,7 @@ function texFor_(m,g,avoidAddr,avoidLen,u=0){
  // After a possible write, every byte must match before a cached texture can be reused.
  // Sampling misses changes between sampled words and can leave corrupted graphics.
  if(t&&t.mem===m&&t.raw.length===len){
-  if(sameAsPages(m,base,len,t.raw,1)){t.fullT=performance.now();stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
+  if(sameAsPages(m,base,len,t.raw)){t.fullT=performance.now();stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
  const raw=pageCopy(m,base,len,new Uint8Array(len));if(!raw)return tn('pages');gcReset();
  if(!t){t={key,mem:m,base,len,w,h,type,tex:gl.createTexture(),raw:null};textures.set(key,t);
   gl.bindTexture(gl.TEXTURE_2D,t.tex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,w,h);
