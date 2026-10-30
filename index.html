@@ -3403,6 +3403,15 @@ class Kernel{
     throw Error('Game reported a fatal error ('+(kinds[type]||'type '+type)+'): result 0x'+result.toString(16).padStart(8,'0')+' at 0x'+pc.toString(16)+(msg?' — '+msg:''));}
    return this.stubReply(name,head,cmdAt,cmd);
   }
+  if(name==='y2r:u'){
+   // Y2R conversion is not implemented yet. Return a real event handle instead
+   // of the generic zero-handle stub, and never pretend pixels were converted.
+   if(head===0x000f0000){this.y2rEvent??={type:'event',signaled:false,reset:0};
+    const handle=this.createHandle(this.y2rEvent);mem.write32(cmdAt,reply(cmd,1,2));mem.write32(cmdAt+4,0);mem.write32(cmdAt+8,0);mem.write32(cmdAt+12,handle);return;}
+   if(head===0x00280000){mem.write32(cmdAt,reply(cmd,2));mem.write32(cmdAt+4,0);mem.write32(cmdAt+8,0);return;}
+   if(head===0x00260000)throw Error('Y2R StartConversion is not implemented: video frame conversion cannot be completed');
+   return this.stubReply(name,head,cmdAt,cmd);
+  }
   if(Kernel.STUB_SERVICES.has(name))return this.stubReply(name,head,cmdAt,cmd);
   if(name==='mic:u'){
    // Microphone HLE backed by local browser device samples.
@@ -4771,6 +4780,7 @@ class Kernel{
   }
   case 0x35:{const h=this.getHandle(r[1]);return this.result(r,h?.type==='process'?0:ERR,h?.type==='process'?h.id:0);}
   case 0x37:{const h=this.getHandle(r[1]);return this.result(r,h?.type==='thread'?0:ERR,h?.type==='thread'?h.id:0);}
+  case 0x3c:{const reason=r[0]>>>0,kind=['PANIC','ASSERT','USER'][reason]||('reason '+reason);throw Error('Guest called svcBreak ('+kind+') at 0x'+cpu.pc.toString(16)+'; LR=0x'+(r[14]>>>0).toString(16));}
   case 0x3d:{const length=r[1];if(length>65536)throw Error('Debug string exceeds limit');const bytes=new Uint8Array(length);for(let i=0;i<length;i++)bytes[i]=this.memory.read8(U(r[0]+i));this.log(new TextDecoder().decode(bytes));return this.result(r);}
   default:throw Error('Unimplemented 3DS SVC 0x'+n.toString(16)+' at 0x'+cpu.pc.toString(16));
   }
