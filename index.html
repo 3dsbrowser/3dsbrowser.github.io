@@ -3382,6 +3382,9 @@ class Kernel{
    if(head===0x00090000)return value(0);   // GetPedometerState: not counting
    if(head===0x000c0000)return value(0);   // GetTotalStepCount
    if(head===0x000e0000)return value(0);   // GetPedometerRecordingMode
+   // ConfigureNew3DSCPU: accept the request without changing the emulated clock.
+   // Protocol behavior adapted from Panda3DS PTMService; see THIRD_PARTY_NOTICES.md.
+   if(head===0x08180040){mem.write32(cmdAt,reply(cmd,1));mem.write32(cmdAt+4,0);return;}
    if(head===0x000b00c2||head===0x000f0084){ // GetStepHistory / GetStepHistoryAll: no steps
     const words=head===0x000b00c2?[mem.read32(cmdAt+16),mem.read32(cmdAt+20)]:[mem.read32(cmdAt+20),mem.read32(cmdAt+24)];
     const size=words[0]>>>4,ptr=words[1];if(size>0x100000)throw Error('ptm:u step history buffer too large');
@@ -6329,13 +6332,16 @@ function pageWrite(m,addr,src,len){
   if(!p||!p.permissions.includes('w'))throw Error('WebGL readback target not writable at 0x'+a.toString(16));
   const o=a&4095,n=Math.min(len-i,4096-o);p.data.set(src.subarray(i,i+n),o);i+=n;}
  m.epoch++;}
-function sameAsPages(m,addr,len,raw,step=1){
- if((addr&3)||(len&3)||(raw.byteOffset&3))return false;
- const r32=new Uint32Array(raw.buffer,raw.byteOffset,len>>2);
+function sameAsPages(m,addr,len,raw){
+ // Compare every byte, including unaligned and short texture formats.
+ if(raw.length<len)return false;
  for(let i=0;i<len;){const a=(addr+i)>>>0,p=m.pages.get((a&~4095)>>>0);if(!p||!p.permissions.includes('r'))return false;
-  const o=a&4095,n=Math.min(len-i,4096-o),d=p.data;if((d.byteOffset+o)&3)return false;
-  const v=new Uint32Array(d.buffer,d.byteOffset+o,n>>2),k0=i>>2;
-  for(let k=0;k<v.length;k+=step)if(v[k]!==r32[k0+k])return false;
+  const o=a&4095,n=Math.min(len-i,4096-o),d=p.data;let k=0;
+  if(!((d.byteOffset+o)&3)&&!((raw.byteOffset+i)&3)){
+   const count=n>>>2,v=new Uint32Array(d.buffer,d.byteOffset+o,count),r=new Uint32Array(raw.buffer,raw.byteOffset+i,count);
+   for(let j=0;j<count;j++)if(v[j]!==r[j])return false;k=count*4;
+  }
+  for(;k<n;k++)if(d[o+k]!==raw[i+k])return false;
   i+=n;}
  return true;}
 const overlaps=(a0,l0,a1,l1)=>a0<a1+l1&&a1<a0+l0;
@@ -6566,9 +6572,10 @@ function texFor_(m,g,avoidAddr,avoidLen,u=0){
  // Every 30 frames the bytes are compared anyway (safety net).
  const other=m.epoch-(m._cpuW|0)-(m._nonWrite|0)-(m._rangedW|0),ww=m._watchW|0,mg=m._mapGen|0;
  if(!trackOff&&t&&t.mem===m&&t.raw.length===len&&t.vo===other&&t.vw===ww&&t.vm===mg&&frameNo-t.vf<30){stats.texFast=(stats.texFast|0)+1;return t;}
- // Full byte compare at most every 100 ms per texture; in between a 1-in-16 word sample (cheap) must still match.
- if(t&&t.mem===m&&t.raw.length===len){const now=performance.now(),quick=now-(t.fullT||0)<100;
-  if(sameAsPages(m,base,len,t.raw,quick?16:1)){if(!quick)t.fullT=now;stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
+ // After a possible write, every byte must match before a cached texture can be reused.
+ // Sampling misses changes between sampled words and can leave corrupted graphics.
+ if(t&&t.mem===m&&t.raw.length===len){
+  if(sameAsPages(m,base,len,t.raw)){t.fullT=performance.now();stats.texHits++;t.vo=other;t.vw=ww;t.vm=mg;t.vf=frameNo;watchPages(m,base,len);return t;}}
  const raw=pageCopy(m,base,len,new Uint8Array(len));if(!raw)return tn('pages');gcReset();
  if(!t){t={key,mem:m,base,len,w,h,type,tex:gl.createTexture(),raw:null};textures.set(key,t);
   gl.bindTexture(gl.TEXTURE_2D,t.tex);gl.texStorage2D(gl.TEXTURE_2D,1,gl.RGBA8,w,h);
@@ -8110,7 +8117,7 @@ function createExecutionController(send){
  const post=()=>send({type:'state',...machine.snapshot(),running,busy,clockMultiplier,gameFrames,perf:perf.last,gpuWasm:typeof WasmGPU!=='undefined'?{available:WasmGPU.available,error:WasmGPU.error,draws:WasmGPU.stats.draws,pixels:WasmGPU.stats.pixels,misses:WasmGPU.stats.misses}:null,wasm:typeof WasmARM!=='undefined'?{available:WasmARM.available,error:WasmARM.error,blocks:WasmARM.stats.blocks,instructions:WasmARM.stats.instructions}:null});
  function sendGuestPreview(strict=false,targets=null){
   if(!machine.memory){if(strict)throw Error('Load an executable before refreshing the LCD scanout.');return false;}
-  const fid=++sentFid;
+  const fid=sentFid+1;
   // GSP reports actual LCD scanout buffers, which differ from the current PICA draw target.
   // Both screens are stored in 240-wide, portrait-rotated guest memory.
   const screens=machine.kernel?.gsp?.framebuffers;
@@ -8120,7 +8127,7 @@ function createExecutionController(send){
    if(typeof PICAWebGL!=='undefined'&&PICAWebGL.active&&PM.mode==='bitmap'){
     const q=list.map(([screen,height])=>{const d=screens[screen];if(targets?.only&&!targets[screen])return {addr:-1,w:0,h:0,fmt:-1};return d&&d.left?{addr:(targets&&targets[screen])||d.left,w:240,h:height,fmt:d.format&7,stride:d.stride|0}:{addr:-1,w:0,h:0,fmt:-1};});
     const r=PICAWebGL.present(machine.memory,q);
-    if(r){done=r.shown;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
+    if(r){done=r.shown;sentFid=fid;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
    }
    for(let si=0;si<list.length;si++){const [screen,height]=list[si];if(done[si])continue;
     const d=screens[screen];if(!d||!d.left||(targets?.only&&!targets[screen]))continue;const address=(targets&&targets[screen])||d.left;
@@ -8129,12 +8136,14 @@ function createExecutionController(send){
      const frame=PICA200.GPU.decodeFramebuffer(machine.memory,{
       address,width:240,height,format:d.format&7,stride:d.stride
      });
-     send({type:'guest-screen',fid,screen,source:'GSP LCD scanout',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);
+     sentFid=fid;send({type:'guest-screen',fid,screen,source:'GSP LCD scanout',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);
      success=true;
     }catch(e){lastError=e;}
    }
    if(success)return true;
   }
+  // A selective frame update must never fall back to an unrelated draw target.
+  if(targets?.only)return false;
   // Before GSP establishes an LCD buffer, an intermediate raster target can
   // still show useful progress, but do not mislabel it as top-screen output.
   if(machine.gpu?.rasterizedDraws){
@@ -8144,7 +8153,7 @@ function createExecutionController(send){
     try{
      const address=PICA200.GPU.gpuToVirtual((r[0x11d]<<3)>>>0);
      const frame=PICA200.GPU.decodeTiledTexture(machine.memory,{address,width,height,format,flipY:true});
-     send({type:'guest-screen',fid,screen:'bottom',source:'intermediate PICA render target',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);return true;
+     sentFid=fid;send({type:'guest-screen',fid,screen:'bottom',source:'intermediate PICA render target',...frame},frame.rgba?.buffer?[frame.rgba.buffer]:[]);return true;
     }catch(e){lastError=e;}
    }
   }
@@ -8295,17 +8304,22 @@ function receive(data){
 // Frames are drawn on the next animation frame; if newer ones arrive first the
 // older ones are dropped, so a busy phone never builds up a backlog. The
 // worker waits for the acknowledgement before sending more than two ahead.
-const framePending={bitmap:null,top:null,bottom:null};let frameRAF=0,frameAck=0;
+const framePending={top:null,bottom:null};let frameRAF=0,frameAck=0;
+// A bitmap can contain one or both screens. Retain it until every pending
+// screen using it is replaced or drawn, so partial updates do not erase each other.
+function releaseFrame(f){if(f?.owner&&!--f.owner.refs)f.owner.bitmap.close?.();}
 function queueFrame(data){
- if(data.type==='guest-bitmap'){if(framePending.bitmap)framePending.bitmap.bitmap.close?.();framePending.bitmap=data;for(const sc of data.screens)framePending[sc.screen]=null;}
- else{framePending[data.screen]=data;const b=framePending.bitmap;if(b){b.screens=b.screens.filter(sc=>sc.screen!==data.screen);}}
+ if(data.type==='guest-bitmap'){
+  const owner={bitmap:data.bitmap,refs:0};
+  for(const sc of data.screens){releaseFrame(framePending[sc.screen]);owner.refs++;framePending[sc.screen]={...sc,bitmap:data.bitmap,topLit:data.topLit,owner};}
+  if(!owner.refs)data.bitmap.close?.();
+ }else{releaseFrame(framePending[data.screen]);framePending[data.screen]=data;}
  frameAck=Math.max(frameAck,data.fid|0);
  if(!frameRAF)frameRAF=requestAnimationFrame(drawFrames);}
-function drawFrames(){frameRAF=0;const b=framePending.bitmap,t=framePending.top,bo=framePending.bottom;
- framePending.bitmap=framePending.top=framePending.bottom=null;
- try{if(b){for(const sc of b.screens)showScreen({...sc,bitmap:b.bitmap,topLit:b.topLit});}
-  if(t)showScreen(t);if(bo)showScreen(bo);}
- finally{b?.bitmap?.close?.();if(frameAck)execute({type:'frame-ack',fid:frameAck});}}
+function drawFrames(){frameRAF=0;const t=framePending.top,bo=framePending.bottom;
+ framePending.top=framePending.bottom=null;
+ try{if(t)showScreen(t);if(bo)showScreen(bo);}
+ finally{releaseFrame(t);releaseFrame(bo);if(frameAck)execute({type:'frame-ack',fid:frameAck});}}
 function showScreen(data){if(data.screen==='top')fpsShown++;
   const bmp=data.bitmap||null,sx=data.sx|0;
   {
