@@ -1,0 +1,9 @@
+const fs=require('fs'),vm=require('vm'),s=fs.readFileSync(process.argv[2]||'index.html','utf8'),context={console,TextDecoder,TextEncoder,Uint8Array,Uint32Array,DataView,BigInt,Map,Set};vm.createContext(context);
+for(const id of ['kernel-code','scheduler-code']){let a=s.indexOf('>',s.indexOf('<script id="'+id+'"'))+1,b=s.indexOf('</script>',a);vm.runInContext(s.slice(a,b),context)}
+const k=Object.create(context.Kernel3DS.Kernel.prototype);k.memory={};k.calls=new Map();k.handles=new Map();k.nextHandle=1;
+const cpu=()=>({regs:new Uint32Array(16)}),c1=cpu(),c2=cpu();const sch=new context.ThreadScheduler.Scheduler(k,c1);let t1=sch.threads[0],t2={type:'thread',id:2,cpu:c2,priority:48,state:'ready',wait:null,deadline:null};sch.threads.push(t2);sch.current=t1;k.currentThread=t1;
+function svc(t,n,vals){sch.current=t;k.currentThread=t;t.cpu.regs.fill(0);for(let [i,v] of Object.entries(vals))t.cpu.regs[i]=v>>>0;k.svc(n,t.cpu);return t.cpu.regs}
+const ok=(x,msg)=>{if(!x)throw Error(msg)};
+let r=svc(t1,0x13,{1:1}),id=r[1],m=k.getHandle(id);ok(m.lockCount===1,'initial');r=svc(t1,0x24,{0:id,2:0,3:0});ok(r[0]===0&&m.lockCount===2,'recursive wait');r=svc(t2,0x24,{0:id,2:0xffffffff,3:0xffffffff});ok(t2.state==='waiting','other waits');r=svc(t2,0x14,{0:id});ok(r[0]!==0&&m.lockCount===2,'nonowner denied');svc(t1,0x14,{0:id});ok(m.lockCount===1&&t2.state==='waiting','partial release');svc(t1,0x14,{0:id});ok(t2.state==='ready'&&m.owner===t2&&m.lockCount===1,'wake owner transfer');sch.notifyExit(t2);ok(!m.locked&&m.lockCount===0,'exit release');
+// Wait-all and wait-any readiness must accept a mutex already held by this thread.
+svc(t1,0x24,{0:id});ok(sch.canAcquireAll([m],t1),'wait-all recursive ready');ok(sch.acquireAll([m],t1)&&m.lockCount===2,'wait-all increments');console.log('PASS: recursive wait, ownership, partial release, waiter wake, exit release, wait-all');
