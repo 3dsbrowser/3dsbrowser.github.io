@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0328 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0329 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -215,7 +215,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
 </style></head><body data-view="library" data-sheet="">
 <main class="library" id="library" aria-label="Game library">
  <header class="appbar">
-  <h1>3DBS - v0.0328</h1>
+  <h1>3DBS - v0.0329</h1>
   <button type="button" class="icon" data-open-settings aria-label="Open settings" aria-haspopup="dialog" title="Settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
  </header>
  <section class="lib-section" aria-labelledby="games-title">
@@ -323,7 +323,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0328 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0329 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -6859,7 +6859,7 @@ function picaToGlsl(code, descs, entry){
 // ---------------------------------------------------------------- GPU-side vertex shading (#hwvs)
 // The PICA vertex shader is translated to GLSL once per program; vertex attributes are uploaded as raw guest bytes and
 // fetched by the GPU (vertexAttribPointer does the byte/short/float decoding). No per-vertex JavaScript.
-const HW={on:!!globalThis.__HWVS,bad:new Set(),gen:new Map(),vso:new Map(),lastVer:-1,lastKey:'',lastEntry:-1,lastCode:null,ready:false,en:0,
+const HW={uses:new Map(),pend:new Set(),PROMOTE:8,MAXPEND:1,on:!!globalThis.__HWVS,bad:new Set(),gen:new Map(),vso:new Map(),lastVer:-1,lastKey:'',lastEntry:-1,lastCode:null,ready:false,en:0,
  buf:new Uint8Array(1<<16),i16:new Uint16Array(3*4096),iv:new Int32Array(16),sem:new Int8Array(24)};
 const HW_HEAD=`#version 300 es
 precision highp float;precision highp int;
@@ -6969,6 +6969,7 @@ function programFor(g,light,hwd){const R=g.regs;let hA=0x811c9dc5,hB=0x9e3779b9;
  for(let i=0xc0;i<0x100;i++){const x=R[i]|0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
  const ck=(R[0x80]&0x3007)+'|'+(R[0x104]>>>0)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
  let p=progKeys.get(ck);if(p)return p;
+ if(hwd){const u=(HW.uses.get(ck)|0)+1;if(HW.uses.size>4096)HW.uses.clear();HW.uses.set(ck,u);if(u<HW.PROMOTE)return null;if(HW.pend.size>=HW.MAXPEND){for(const q of [...HW.pend])progReady(q);if(HW.pend.size>=HW.MAXPEND)return null;}}
  p=programForSlow(g,light,hwd);if(progKeys.size>2048)progKeys.clear();progKeys.set(ck,p);return p;}
 let vsObj=null,PSC;
 function progUniforms(p){if(p.isHW)hwUniforms(p);const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);
@@ -6979,7 +6980,7 @@ function progUniforms(p){if(p.isHW)hwUniforms(p);const pr=p.pr,U=n=>gl.getUnifor
 function progReady(p){if(!p.pending)return true;
  {const t=performance.now();if(t-(p.poll||0)<6)return false;p.poll=t;}
  if(!gl.getProgramParameter(p.pr,PSC.COMPLETION_STATUS_KHR)){stats.deferredDraws=(stats.deferredDraws|0)+1;return false;}
- p.pending=false;
+ p.pending=false;HW.pend.delete(p);globalThis.__HWPEND=HW.pend.size;
  if(!gl.getProgramParameter(p.pr,gl.LINK_STATUS))p.failed='WebGL link: '+gl.getProgramInfoLog(p.pr)+' '+(gl.getShaderInfoLog(p.fsh)||'');
  else progUniforms(p);
  return true;}
@@ -6990,7 +6991,7 @@ function programForSlow(g,light,hwd){const fs0=fragmentSource(g,light),fs=hwd?fs
   const fsh=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(fsh,fs0);gl.compileShader(fsh);
   const pr=gl.createProgram();gl.attachShader(pr,hwd?hwVso(hwd):vsObj);gl.attachShader(pr,fsh);
   ['aPos','aCol','aUV','aUV1','aUV2','aNQ','aView'].forEach((n,i)=>gl.bindAttribLocation(pr,i,n));gl.linkProgram(pr);
-  p={pr,fsh,pending:true,failed:null,isHW:!!hwd};
+  p={pr,fsh,pending:true,failed:null,isHW:!!hwd};if(hwd){HW.pend.add(p);globalThis.__HWPEND=HW.pend.size;}
  }else{
  const pr=gl.createProgram();gl.attachShader(pr,hwd?hwVso(hwd):compile(gl.VERTEX_SHADER,VS));gl.attachShader(pr,compile(gl.FRAGMENT_SHADER,fs0));
  ['aPos','aCol','aUV','aUV1','aUV2','aNQ','aView'].forEach((n,i)=>gl.bindAttribLocation(pr,i,n));gl.linkProgram(pr);
@@ -7250,7 +7251,7 @@ function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
 function drawGL(...a){const t0=performance.now();try{return drawGL_(...a);}finally{stats.msGL=(stats.msGL||0)+performance.now()-t0;}}
 function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,GJ,HWD,HSH){
  const rt=rtFor(m,addr,width,height,(g.regs[0x117]>>>16)&7);if(rt.memStale)upload(rt);
- const TP=performance.now();let p;try{p=programFor(g,light,HWD);}catch(e){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(e&&e.message).slice(0,300);return {hwFail:true};}throw e;}if(p.pending&&!progReady(p)){if(HWD)return {hwFail:true,soft:true};return {pixels:0,triangles:0,width,height,format:0,address:addr};}if(p.failed){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(p.failed).slice(0,300);return {hwFail:true};}throw Error(p.failed);}const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
+ const TP=performance.now();let p;try{p=programFor(g,light,HWD);if(!p)return {hwFail:true,soft:true};}catch(e){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(e&&e.message).slice(0,300);return {hwFail:true};}throw e;}if(p.pending&&!progReady(p)){if(HWD)return {hwFail:true,soft:true};return {pixels:0,triangles:0,width,height,format:0,address:addr};}if(p.failed){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(p.failed).slice(0,300);return {hwFail:true};}throw Error(p.failed);}const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
  // GC mirrors the GL state this function sets; other GL users call gcReset(). Unchanged state costs no GL call
  // (each call is an IPC round trip on mobile browsers).
  if(GC.fbo!==rt.fbo){FL();gl.bindFramebuffer(gl.FRAMEBUFFER,rt.fbo);GC.fbo=rt.fbo;}
@@ -7995,7 +7996,7 @@ function createExecutionController(send){
  function pmTick(now){
   if(!PM.t0){PM.t0=now;PM.g0=gameFrames;PM.p0=previewsSent;return;}
   const dt=now-PM.t0;if(dt<2000)return;
-  const score=dt<10000?((gameFrames-PM.g0)+(previewsSent-PM.p0))*1000/dt:-1;
+  const score=dt<10000&&!globalThis.__HWPEND?((gameFrames-PM.g0)+(previewsSent-PM.p0))*1000/dt:-1;
   PM.t0=now;PM.g0=gameFrames;PM.p0=previewsSent;if(score<0)return;
   if(!PM.probing){
    if(!PM.next){if(gameFrames>=300){pmStart();}return;}
@@ -8004,7 +8005,7 @@ function createExecutionController(send){
    if(PM.bad>=5){PM.bad=0;pmStart();}return;}
   PM.scores[PM.mode]+=score;
   if(PM.order.length){PM.mode=PM.order.shift();return;}
-  PM.mode=PM.scores.readback>PM.scores.bitmap*1.15?'readback':'bitmap';PM.best=PM.scores[PM.mode]/2;
+  PM.mode=PM.scores.readback>PM.scores.bitmap*1.6?'readback':'bitmap';PM.best=PM.scores[PM.mode]/2;
   PM.probing=false;PM.next=now+60000;}
  const perf={tick:0,prev:0,prevN:0,t0:0,last:null,ins0:0,ins1:0};
  function perfSample(){const now=performance.now();perf.ins1=machine?.instructions||0;if(!perf.t0){perf.t0=now;perf.ins0=perf.ins1;return;}const dt=now-perf.t0;if(dt<1000)return;
