@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0316 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0317 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -323,7 +323,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0316 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0317 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -6852,6 +6852,7 @@ function vpInit(){
 function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
  if(!VP.tried){VP.tried=true;vpInit();}
  if(!VP.ready||VP.dead)return -9;
+ const tA=performance.now();
  const R=g.regs,GPUc=g.constructor,plan=VP.plan;plan.length=0;
  const fixed=(R[0x202]>>>16)&0xfff,count=((R[0x202]>>>28)&15)+1,base=(R[0x200]<<3)>>>0;let nIn=1;
  for(let block=0;block<12;block++){
@@ -6893,6 +6894,7 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
    I[3*i]=shade(a);I[3*i+1]=shade(b);I[3*i+2]=shade(c);}
  }catch(e){return -9;}
  if(uniq<VP.MIN)return -9;
+ const tB=performance.now();
  const ctl=VP.ctl;
  {const L=Math.min(4096,shader.code.length);let ch=ctl[5]!==L||ctl[3]!==(shader.entry|0);const C=VP.CODE,D=VP.DESC,sc=shader.code,sd=shader.descs;
   if(!ch){for(let i=0;i<L;i++)if(C[i]!==(sc[i]>>>0)){ch=true;break;}}
@@ -6906,10 +6908,11 @@ function fastVerticesPool(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height,VS_){
  const PAR=VP.PAR;PAR[0]=2*vpW/width;PAR[1]=2*(vpX+vpW)/width-1;PAR[2]=2*vpH/height;PAR[3]=2*(height-vpY-vpH)/height-1;PAR[4]=ZS.on?1:0;PAR[5]=ZS.s||0;PAR[6]=ZS.o||0;
  ctl[2]=uniq;ctl[6]=nIn;ctl[7]=0;ctl[8]=VP.K;Atomics.store(ctl,1,0);Atomics.add(ctl,0,1);Atomics.notify(ctl,0);
  const t0=performance.now();let d;while((d=Atomics.load(ctl,1))<VP.K){Atomics.wait(ctl,1,d,100);if(performance.now()-t0>3000){VP.dead=true;return -9;}}
+ const tC=performance.now();stats.vpFetch=(stats.vpFetch||0)+tB-tA;stats.vpWait=(stats.vpWait||0)+tC-tB;
  if(ctl[7]!==0){VP.fails=(VP.fails|0)+1;if(ctl[7]===2){VP.dead=true;}return -9;}
  if(vdata.length<nOut*VS_)vdata=new Float32Array(nOut*VS_*2);
  const OUT=VP.OUT;for(let i=0;i<nOut;i++){const o=I[i]*24,dd=i*VS_;for(let k=0;k<VS_;k++)vdata[dd+k]=OUT[o+k];}
- stats.vpDraws=(stats.vpDraws|0)+1;stats.vpVerts=(stats.vpVerts|0)+uniq;
+ stats.vpCopy=(stats.vpCopy||0)+performance.now()-tC;stats.vpDraws=(stats.vpDraws|0)+1;stats.vpVerts=(stats.vpVerts|0)+uniq;stats.vpTris=(stats.vpTris|0)+nOut/3;
  return nOut;}
 function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
  const R=g.regs,GPUc=g.constructor,IN=FV.IN;
@@ -7745,7 +7748,7 @@ function createExecutionController(send){
    show:Math.round(perf.prev/dt*100),showMs:perf.prevN?+(perf.prev/perf.prevN).toFixed(1):0,mode:PM.mode+(PM.probing?'?':''),
    gl:typeof PICAWebGL!=='undefined'&&PICAWebGL.active,track:!(gs.trackOff),jit:typeof JitARM==='undefined'?'none':(JitARM.available?(JitARM.backend==='wasm'?'WASM JIT'+(globalThis.__ARENA_SHARED?' (shared mem)':''):'JS JIT'):'interpreter'),jitPct:Math.round(((JitARM?.stats?.instructions||0)-(perf.j0||0))*100/Math.max(1,(perf.ins1-(perf.ins0||0)))),compMs:Math.round(((JitARM?.stats?.compileMs||0)-(perf.c0||0))*1000/dt),mips:Math.round((perf.ins1-(perf.ins0||0))/dt/1000),idle:Math.max(0,Math.round((dt-perf.tick)/dt*100))};
   {const T=gs.glT||{};const P0=perf.g0||{};const arr=[];for(const k in T){if(k[0]==='#')continue;const d=T[k]-(P0[k]||0);if(d>=1)arr.push([k,d,(T['#'+k]|0)-(P0['#'+k]|0)]);}
-   arr.sort((a,b)=>b[1]-a[1]);{const ph=(k)=>Math.round(((gs[k]||0)-(perf[k+'0']||0))*100/dt);perf.last.ph='vert '+ph('msVert')+'% · tex '+ph('msTex')+'% · drawGL '+ph('msGL')+'% · draws '+((gs.draws|0)-(perf.dr0|0))+' · pool '+(gs.vpDraws|0)+(gs.vpBad?' BAD '+gs.vpBad+' '+JSON.stringify(gs.vpFirst):'');perf.msVert0=gs.msVert||0;perf.msTex0=gs.msTex||0;perf.msGL0=gs.msGL||0;perf.dr0=gs.draws|0;}
+   arr.sort((a,b)=>b[1]-a[1]);{const ph=(k)=>Math.round(((gs[k]||0)-(perf[k+'0']||0))*100/dt);perf.last.ph='vert '+ph('msVert')+'% · tex '+ph('msTex')+'% · drawGL '+ph('msGL')+'% · draws '+((gs.draws|0)-(perf.dr0|0))+' · pool '+(gs.vpDraws|0)+(gs.vpBad?' BAD '+gs.vpBad:'')+'<br>pool: fetch '+ph('vpFetch')+'% · wait '+ph('vpWait')+'% · copy '+ph('vpCopy')+'% · '+Math.round(((gs.vpVerts|0)-(perf.vv0|0))/(dt/1000))+' verts/s ×'+(globalThis.__VPOOL_N||0);perf.vpFetch0=gs.vpFetch||0;perf.vpWait0=gs.vpWait||0;perf.vpCopy0=gs.vpCopy||0;perf.vv0=gs.vpVerts|0;perf.msVert0=gs.msVert||0;perf.msTex0=gs.msTex||0;perf.msGL0=gs.msGL||0;perf.dr0=gs.draws|0;}
    perf.last.glTop=arr.slice(0,4).map(a=>a[0]+' '+Math.round(a[1]*1000/dt)/10+'% x'+a[2]).join(' · ');perf.g0=Object.assign({},T);}
   perf.tick=0;perf.prev=0;perf.prevN=0;perf.d0=gs.drawMs||0;perf.t0=now;perf.ins0=perf.ins1;perf.j0=JitARM?.stats?.instructions||0;perf.c0=JitARM?.stats?.compileMs||0;}
  // Adaptive frame skip: GPU work is only done for frames that get shown. When a rendered frame's draws are
