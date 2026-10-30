@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0323 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0324 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -323,7 +323,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0323 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0324 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -6750,14 +6750,216 @@ void main(){
 }`;}
 function compile(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error('WebGL shader: '+gl.getShaderInfoLog(s));return s;}
+// PICA200 vertex shader -> GLSL ES 3.00 (structured control flow). Returns {ok,src,reason}.
+function picaToGlsl(code, descs, entry){
+ const LEN=Math.min(code.length,4096);const W=i=>(code[i]>>>0);
+ const fns=new Map();const fnSrc=[];let fail=null;let steps=0;
+ const bad=r=>{if(!fail)fail=r;};
+ const cond=w=>{const x=`(CM0==${(w&0x2000000)?'true':'false'})`,y=`(CM1==${(w&0x1000000)?'true':'false'})`;
+  switch((w>>>22)&3){case 0:return `(${x}||${y})`;case 1:return `(${x}&&${y})`;case 2:return x;default:return y;}};
+ const relName=r=>r===0?null:(r===1?'AD0':r===2?'AD1':'AD2');
+ const SW='xyzw';
+ const operand=(idx,rel,sel,neg)=>{
+  const sw=[0,1,2,3].map(k=>SW[(sel>>>(6-k*2))&3]).join('');let base;
+  if(idx<16)base=`aI${idx}`;else if(idx<32)base=`T[${idx-16}]`;
+  else{const n=idx-32;if(rel===null)base=n>=96?'vec4(1.0)':`uC[${n}]`;else base=`getC(${n},${rel})`;}
+  return (neg?'-':'')+`${base}.${sw}`;};
+ const cmpx=(c,x,y)=>[`(${x}==${y})`,`(${x}!=${y})`,`(${x}<${y})`,`(${x}<=${y})`,`(${x}>${y})`,`(${x}>=${y})`,'true','true'][c];
+ function genInstr(N,w,ctx){
+  const op=w>>>26;
+  const mad=op>=0x30,inv=(op>=0x18&&op<=0x1b)||(op>=0x30&&op<=0x37);
+  const supported=op<=0xf&&op!==7||op===0x12||op===0x13||(op>=0x18&&op<=0x1b)||mad||op===0x2e||op===0x2f;
+  if(!supported){bad('op 0x'+op.toString(16));return '';}
+  const id=mad?(w&31):(w&127);const d=descs[id]>>>0;
+  let src1,src2,src3=0,dst;
+  if(mad){src1=(w>>>17)&31;src2=inv?(w>>>12)&31:(w>>>10)&127;src3=inv?(w>>>5)&127:(w>>>5)&31;dst=(w>>>24)&31;}
+  else{src1=inv?(w>>>14)&31:(w>>>12)&127;src2=inv?(w>>>7)&127:(w>>>7)&31;dst=(w>>>21)&31;}
+  const rel=(w>>>19)&3,rs=relName(rel);
+  const relA=(!inv&&!mad)?rs:null,relB=(inv!==mad)?rs:null,relC=(inv&&mad)?rs:null;
+  let s=`{vec4 s=${operand(src1,relA,(d>>>5)&255,(d>>>4)&1)};vec4 t=${operand(src2,relB,(d>>>14)&255,(d>>>13)&1)};`;
+  if(mad)s+=`vec4 r=${operand(src3,relC,(d>>>23)&255,(d>>>22)&1)};`;
+  let res=null;
+  switch(op){
+   case 0x00:res='s+t';break;
+   case 0x01:res='vec4(dot(s.xyz,t.xyz))';break;
+   case 0x02:case 0x18:res='vec4(dot(s,t))';break;
+   case 0x03:res='vec4(dot(s.xyz,t.xyz)+t.w)';break;
+   case 0x04:case 0x19:res='vec4(1.0,s.y*t.y,s.z,t.w)';break;
+   case 0x05:res='vec4(exp2(s.x))';break;
+   case 0x06:res='vec4(log2(s.x))';break;
+   case 0x08:res='s*t';break;
+   case 0x09:case 0x1a:res='vec4(greaterThanEqual(s,t))';break;
+   case 0x0a:case 0x1b:res='vec4(lessThan(s,t))';break;
+   case 0x0b:res='floor(s)';break;
+   case 0x0c:res='max(s,t)';break;
+   case 0x0d:res='min(s,t)';break;
+   case 0x0e:res='vec4(1.0/s.x)';break;
+   case 0x0f:res='vec4(1.0/sqrt(s.x))';break;
+   case 0x12:if(d&8)s+='AD0=int(s.x);';if(d&4)s+='AD1=int(s.y);';break;
+   case 0x13:res='s';break;
+   case 0x2e:case 0x2f:s+=`CM0=${cmpx((w>>>24)&7,'s.x','t.x')};CM1=${cmpx((w>>>21)&7,'s.y','t.y')};`;break;
+   default:if(mad)res='s*t+r';else{bad('op '+op);return '';}
+  }
+  if(res){s+=`vec4 q=${res};`;const arr=dst<16?'O':'T',b=dst<16?dst:dst-16;
+   for(let k=0;k<4;k++)if(d&(8>>>k))s+=`${arr}[${b}].${SW[k]}=q.${SW[k]};`;}
+  return s+'}\n';
+ }
+ // range [a,b) -> GLSL statements. ctx.loop: inside a loop body (BREAK allowed). Forward jumps that leave the
+ // current range set jt=target; later statements are guarded until the target pc resets it.
+ let esc=new Set();
+ function range(a,b,ctx){
+  let out='';let pc=a;
+  while(pc<b){
+   if(fail)return out;
+   if(pc>=LEN){bad('pc range');return out;}
+   if(++steps>6000){bad('too big');return out;}
+   if(esc.has(pc)){out+=`if(jt==${pc})jt=0;\n`;esc.delete(pc);}
+   let guarded=false;for(const P of esc)if(P>pc){guarded=true;break;}
+   const w=W(pc),op=w>>>26,T=(w>>>10)&0xfff,C=w&255;let piece='',npc=pc+1;
+   if(op===0x22){ if(ctx.depth>0){bad('END in nested');return out;} out+='return;\n';return out;}
+   else if(op===0x21){}
+   else if(op===0x24||op===0x25||op===0x26){
+    const g=op===0x24?'true':op===0x25?cond(w):`((uBools>>${(w>>>22)&15})&1)!=0`;
+    piece=`if(${g}){${sub(T,C,ctx)}();}\n`;}
+   else if(op===0x27||op===0x28){
+    const test=op===0x27?`((uBools>>${(w>>>22)&15})&1)!=0`:cond(w);
+    if(T<=pc){bad('if layout');return out;}
+    piece=`if(${test}){\n${range(pc+1,T,ctx)}}else{\n${range(T,T+C,ctx)}}\n`;npc=T+C;}
+   else if(op===0x2c||op===0x2d){
+    const test=op===0x2c?cond(w):`(((uBools>>${(w>>>22)&15})&1)!=0)!=${(w&1)?'true':'false'}`;
+    if(T<=pc){bad('jmp back '+pc+'->'+T);return out;}
+    if(T<=b){piece=`if(!(${test})){\n${range(pc+1,T,ctx)}}\n`;npc=T;}
+    else{if(ctx.loop){bad('jmp out of loop');return out;}esc.add(T);piece=`if(${test})jt=${T};\n`;}}
+   else if(op===0x29){
+    if(T<pc+1||T+1>b){bad('loop layout');return out;}
+    const k=(w>>>22)&3;
+    piece=`{ivec4 iv=uI[${k}];AD2=iv.y&255;int cnt=iv.x&255;for(int li=0;li<256;li++){\n${range(pc+1,T+1,{depth:ctx.depth,loop:true})}AD2+=iv.z&255;if(li>=cnt)break;}}\n`;npc=T+1;}
+   else if(op===0x20||op===0x23){
+    if(!ctx.loop){bad('break outside loop');return out;}
+    piece=op===0x23?`if(${cond(w)})break;\n`:'break;\n';}
+   else piece=genInstr(pc,w,ctx);
+   if(fail)return out;
+   out+=(guarded&&piece)?`if(jt==0){\n${piece}}\n`:piece;pc=npc;
+  }
+  if(esc.has(pc)){out+=`if(jt==${pc})jt=0;\n`;esc.delete(pc);}
+  return out;
+ }
+ function sub(T,C,ctx){const key=T+'_'+C;if(fns.has(key))return fns.get(key);
+  const name='f'+key;fns.set(key,name);
+  const saved=esc;esc=new Set();
+  const body=range(T,T+C,{depth:(ctx.depth|0)+1,loop:false});
+  if(esc.size)bad('jmp beyond function');esc=saved;
+  fnSrc.push(`void ${name}(){\n${body}}\n`);return name;}
+ // main body: from entry to END
+ let main=range(entry,LEN,{depth:0,loop:false});
+ if(fail)return {ok:false,reason:fail};
+ return {ok:true,src:fnSrc.join('')+`void picaMain(){\n${main}}\n`,nfn:fns.size};
+}
+
+// ---------------------------------------------------------------- GPU-side vertex shading (#hwvs)
+// The PICA vertex shader is translated to GLSL once per program; vertex attributes are uploaded as raw guest bytes and
+// fetched by the GPU (vertexAttribPointer does the byte/short/float decoding). No per-vertex JavaScript.
+const HW={on:!!globalThis.__HWVS,bad:new Set(),gen:new Map(),vso:new Map(),lastVer:-1,lastKey:'',lastEntry:-1,lastCode:null,ready:false,en:0,
+ buf:new Uint8Array(1<<16),i16:new Uint16Array(3*4096),iv:new Int32Array(16),sem:new Int8Array(24)};
+const HW_HEAD=`#version 300 es
+precision highp float;precision highp int;
+${Array.from({length:16},(_,k)=>`layout(location=${k}) in vec4 aI${k};`).join('')}
+uniform vec4 uC[96];uniform ivec4 uI[4];uniform int uBools;uniform vec4 uClip;uniform vec3 uZ;
+out vec4 vCol;out vec2 vUV;out vec2 vUV1;out vec2 vUV2;out vec4 vNQ;out vec3 vView;
+vec4 T[16];vec4 O[16];bool CM0;bool CM1;int AD0;int AD1;int AD2;int jt;
+vec4 getC(int n,int R){if(R>=-128&&R<=127)n=(n+R)&127;return n>=96?vec4(1.0):uC[n];}
+`;
+function hwInit(){if(HW.ready)return;
+ HW.vao=gl.createVertexArray();gl.bindVertexArray(HW.vao);HW.vbo=gl.createBuffer();HW.ibo=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,HW.ibo);
+ for(let k=0;k<16;k++)gl.vertexAttrib4f(k,0,0,0,1);
+ gl.bindVertexArray(vao);HW.ready=true;GC={};}
+function hwShaderKey(g,shader){
+ if(HW.lastVer===(g.vshVer|0)&&HW.lastEntry===(shader.entry|0)&&HW.lastCode===shader.code)return HW.lastKey;
+ const sc=shader.code,sd=shader.descs,L=Math.min(4096,sc.length);let h1=0x811c9dc5^L,h2=0x9e3779b9^(shader.entry|0);
+ for(let i=0;i<L;i++){const x=sc[i]|0;h1=Math.imul(h1^x,16777619);h2=Math.imul(h2+x,0x85ebca6b)^(h2>>>13);}
+ for(let i=0;i<128;i++){const x=(sd[i]||0)|0;h1=Math.imul(h1^x,16777619);h2=Math.imul(h2+x,0xc2b2ae35)^(h2>>>15);}
+ const k=(h1>>>0)+'/'+(h2>>>0)+'/'+(shader.entry|0);HW.lastVer=g.vshVer|0;HW.lastEntry=shader.entry|0;HW.lastCode=sc;HW.lastKey=k;return k;}
+function hwVsSource(gen,sem){
+ const ref=id=>{const q=sem[id];return q<0?'0.0':`O[${q>>2}].${'xyzw'[q&3]}`;};
+ return HW_HEAD+gen.src+`void main(){for(int i=0;i<16;i++){T[i]=vec4(0.0);O[i]=vec4(0.0);}CM0=false;CM1=false;AD0=0;AD1=0;AD2=0;jt=0;picaMain();
+float px=${ref(0)},py=${ref(1)},pz=${ref(2)},pw=${ref(3)};
+gl_Position=vec4(uClip.x*px+uClip.y*pw,uClip.z*py+uClip.w*pw,uZ.x>0.5?2.0*uZ.y*pz+(2.0*uZ.z-1.0)*pw:0.0,pw);
+vCol=vec4(${ref(8)},${ref(9)},${ref(10)},${ref(11)});vUV=vec2(${ref(12)},${ref(13)});vUV1=vec2(${ref(14)},${ref(15)});vUV2=vec2(${ref(22)},${ref(23)});
+vNQ=vec4(${ref(4)},${ref(5)},${ref(6)},${ref(7)});vView=vec3(${ref(18)},${ref(19)},${ref(20)});}`;}
+// Returns a draw descriptor, or null when this draw must take the CPU path.
+function hwPrep(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
+ if(mode<0||mode>3)return null;const N=idx.length;if(N<3)return null;
+ const R=g.regs,GPUc=g.constructor;
+ const key=hwShaderKey(g,shader);let gen=HW.gen.get(key);
+ if(gen===undefined){try{gen=picaToGlsl(shader.code,shader.descs,shader.entry|0);}catch(e){gen={ok:false,reason:String(e&&e.message)};}
+  if(HW.gen.size>64)HW.gen.clear();HW.gen.set(key,gen);if(!gen.ok){stats.hwWhy=gen.reason;}}
+ if(!gen.ok)return null;
+ const sem=HW.sem;sem.fill(-1);{const mask=R[0x2bd];let sl=0;
+  for(let reg=0;reg<16;reg++)if(mask&(1<<reg)){const mp=R[0x50+sl]>>>0;for(let c=0;c<4;c++){const id=(mp>>>(c*8))&31;if(id<24)sem[id]=reg*4+c;}sl++;}}
+ const vkey=key+'|'+sem.join(',');if(HW.bad.has(vkey))return null;
+ // attribute layout
+ const fixed=(R[0x202]>>>16)&0xfff,count=((R[0x202]>>>28)&15)+1,base=(R[0x200]<<3)>>>0;
+ const fields=[];const blocks=[];
+ for(let block=0;block<12;block++){
+  const ptr=0x203+3*block,cA=R[ptr+1],cB=R[ptr+2],num=(cB>>>28)&15,stride=(cB>>>16)&255;
+  if(!num||!stride)continue;const phys=(base+(R[ptr]&0x0fffffff))>>>0;let cursor=0,used=false;
+  for(let field=0;field<num&&field<12;field++){
+   const at=field<8?(cA>>>(field*4))&15:(cB>>>((field-8)*4))&15;
+   if(at>=12){cursor=(cursor+3)&~3;cursor+=(at-11)*4;continue;}
+   if(at>=count||(fixed&(1<<at)))continue;
+   const nib=at<8?(R[0x201]>>>(at*4))&15:(R[0x202]>>>((at-8)*4))&15,type=nib&3,comps=((nib>>>2)&3)+1,eb=[1,1,2,4][type];
+   cursor=(cursor+eb-1)&~(eb-1);
+   const perm=at<8?(R[0x2bb]>>>(at*4))&15:(R[0x2bc]>>>((at-8)*4))&15;
+   if(stride%eb||cursor%eb)return null;
+   fields.push({bi:blocks.length,off:cursor,type,comps,perm});used=true;cursor+=comps*eb;}
+  if(used)blocks.push({phys,stride});}
+ if(!fields.length)return null;
+ let mn=0x7fffffff,mx=-1;for(let i=0;i<N;i++){const v=idx[i];if(v<mn)mn=v;if(v>mx)mx=v;}
+ if(mx-mn>65534)return null;
+ // raw vertex bytes of every block
+ let total=0;const dst=[];for(const b of blocks){const len=(mx-mn+1)*b.stride;if(len>(1<<20))return null;total=(total+3)&~3;dst.push(total);total+=len;}
+ if(HW.buf.length<total)HW.buf=new Uint8Array(Math.max(total,HW.buf.length*2));
+ const P=m.pages;
+ try{for(let bi=0;bi<blocks.length;bi++){const b=blocks[bi];const len=(mx-mn+1)*b.stride;
+   let va=GPUc.gpuToVirtual((b.phys+mn*b.stride)>>>0),o=dst[bi],left=len;
+   while(left>0){const pg=P.get((va&~4095)>>>0);if(!pg||!pg.permissions.includes('r'))return null;
+    const po=va&4095,n=Math.min(left,4096-po);HW.buf.set(pg.data.subarray(po,po+n),o);o+=n;va=(va+n)>>>0;left-=n;}}}catch(e){return null;}
+ // indices (rebased); strips/fans use the GL primitive of the same winding rules
+ const tri=(mode===0||mode===3);let cnt=tri?N-N%3:N;if(cnt<3)return null;
+ if(HW.i16.length<cnt)HW.i16=new Uint16Array(cnt*2);const I=HW.i16;for(let i=0;i<cnt;i++)I[i]=idx[i]-mn;
+ return {vkey,gen,sem:Int8Array.from(sem),fields,blocks,dst,total,cnt,prim:mode===0||mode===3?0:mode===1?1:2,
+  kx:2*vpW/width,bx:2*(vpX+vpW)/width-1,ky:2*vpH/height,by:2*(height-vpY-vpH)/height-1};}
+let hwVsObjs=new Map();
+function hwVso(D){let o=hwVsObjs.get(D.vkey);if(!o){o=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(o,hwVsSource(D.gen,D.sem));gl.compileShader(o);if(hwVsObjs.size>96)hwVsObjs=new Map();hwVsObjs.set(D.vkey,o);}return o;}
+function hwUniforms(p){const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);p.hw={uC:U('uC'),uI:U('uI'),uBools:U('uBools'),uClip:U('uClip'),uZ:U('uZ'),uver:-1,sh:null,iv:new Int32Array(16),bm:-1,clip:'',z:''};}
+const HW_GLT=()=>[gl.BYTE,gl.UNSIGNED_BYTE,gl.SHORT,gl.FLOAT];
+const hwF=new Float32Array(384);
+function hwDraw(g,p,D,shader){
+ if(!HW.ready)hwInit();const H=p.hw;
+ // shader uniforms: re-sent only when the guest wrote one
+ if(H.uver!==(g.uniVer|0)||H.sh!==shader.uniforms){const un=shader.uniforms;for(let i=0;i<96;i++){const v=un[i];if(v){hwF[i*4]=+v[0]||0;hwF[i*4+1]=+v[1]||0;hwF[i*4+2]=+v[2]||0;hwF[i*4+3]=+v[3]||0;}else{hwF[i*4]=0;hwF[i*4+1]=0;hwF[i*4+2]=0;hwF[i*4+3]=0;}}
+  gl.uniform4fv(H.uC,hwF);H.uver=g.uniVer|0;H.sh=shader.uniforms;}
+ {const iv=HW.iv;for(let i=0;i<4;i++){const v=shader.ints[i]||[0,0,0,0];for(let k=0;k<4;k++)iv[i*4+k]=v[k]|0;}
+  let ch=false;for(let i=0;i<16;i++)if(iv[i]!==H.iv[i]){ch=true;break;}if(ch){H.iv.set(iv);gl.uniform4iv(H.uI,iv);}
+  let bm=0;for(let i=0;i<16;i++)if(shader.bools[i])bm|=1<<i;if(bm!==H.bm){H.bm=bm;gl.uniform1i(H.uBools,bm);}}
+ {const ck=D.kx+','+D.bx+','+D.ky+','+D.by;if(H.clip!==ck){H.clip=ck;gl.uniform4f(H.uClip,D.kx,D.bx,D.ky,D.by);}
+  const zk=(ZS.on?1:0)+','+(ZS.s||0)+','+(ZS.o||0);if(H.z!==zk){H.z=zk;gl.uniform3f(H.uZ,ZS.on?1:0,ZS.s||0,ZS.o||0);}}
+ gl.bindVertexArray(HW.vao);GC.va=2;
+ gl.bindBuffer(gl.ARRAY_BUFFER,HW.vbo);gl.bufferData(gl.ARRAY_BUFFER,HW.buf.subarray(0,D.total),gl.STREAM_DRAW);
+ const T=HW_GLT();let en=0;
+ for(const f of D.fields){const b=D.blocks[f.bi];gl.enableVertexAttribArray(f.perm);gl.vertexAttribPointer(f.perm,f.comps,T[f.type],false,b.stride,D.dst[f.bi]+f.off);en|=1<<f.perm;}
+ for(let k=0;k<16;k++)if((HW.en&~en)&(1<<k))gl.disableVertexAttribArray(k);HW.en=en;
+ gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,HW.i16.subarray(0,D.cnt),gl.STREAM_DRAW);
+ gl.drawElements(D.prim===0?gl.TRIANGLES:D.prim===1?gl.TRIANGLE_STRIP:gl.TRIANGLE_FAN,D.cnt,gl.UNSIGNED_SHORT,0);
+ stats.hwDraws=(stats.hwDraws|0)+1;stats.hwVerts=(stats.hwVerts|0)+D.cnt;}
 const progKeys=new Map();
-function programFor(g,light){const R=g.regs;let hA=0x811c9dc5,hB=0x9e3779b9;
+function programFor(g,light,hwd){const R=g.regs;let hA=0x811c9dc5,hB=0x9e3779b9;
  for(let i=0xc0;i<0x100;i++){const x=R[i]|0;hA=Math.imul(hA^x,16777619);hB=Math.imul(hB+x,0x85ebca6b)^(hB>>>13);}
- const ck=(R[0x80]&0x3007)+'|'+(R[0x104]>>>0)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0);
+ const ck=(R[0x80]&0x3007)+'|'+(R[0x104]>>>0)+'|'+(light?light.key:'-')+'|'+(hA>>>0)+'/'+(hB>>>0)+(hwd?'|H'+hwd.vkey:'');
  let p=progKeys.get(ck);if(p)return p;
- p=programForSlow(g,light);if(progKeys.size>2048)progKeys.clear();progKeys.set(ck,p);return p;}
+ p=programForSlow(g,light,hwd);if(progKeys.size>2048)progKeys.clear();progKeys.set(ck,p);return p;}
 let vsObj=null,PSC;
-function progUniforms(p){const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);
+function progUniforms(p){if(p.isHW)hwUniforms(p);const pr=p.pr,U=n=>gl.getUniformLocation(pr,n);
  p.uTex=[U('uTex'),U('uTex1'),U('uTex2')];p.uSize=[U('uSize'),U('uSize1'),U('uSize2')];p.uWrap=[U('uWrap'),U('uWrap1'),U('uWrap2')];p.uBorder=[U('uBorder'),U('uBorder1'),U('uBorder2')];
  p.uLut=U('uLut');p.uLPos=U('uLPos');p.uLS0=U('uLS0');p.uLS1=U('uLS1');p.uLDif=U('uLDif');p.uLAmb=U('uLAmb');p.uLSpot=U('uLSpot');p.uLDA=U('uLDA');p.uLGAmb=U('uLGAmb');}
 // Shader compiles can take 100 ms-seconds each on desktop drivers (ANGLE/D3D). With KHR_parallel_shader_compile they
@@ -6768,19 +6970,19 @@ function progReady(p){if(!p.pending)return true;
  if(!gl.getProgramParameter(p.pr,gl.LINK_STATUS))p.failed='WebGL link: '+gl.getProgramInfoLog(p.pr)+' '+(gl.getShaderInfoLog(p.fsh)||'');
  else progUniforms(p);
  return true;}
-function programForSlow(g,light){const fs=fragmentSource(g,light);let p=programs.get(fs);if(p)return p;
+function programForSlow(g,light,hwd){const fs0=fragmentSource(g,light),fs=hwd?fs0+'\n//HW '+hwd.vkey:fs0;let p=programs.get(fs);if(p)return p;
  if(PSC===undefined)PSC=gl.getExtension('KHR_parallel_shader_compile')||null;
  if(PSC){
   if(!vsObj){vsObj=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(vsObj,VS);gl.compileShader(vsObj);}
-  const fsh=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(fsh,fs);gl.compileShader(fsh);
-  const pr=gl.createProgram();gl.attachShader(pr,vsObj);gl.attachShader(pr,fsh);
+  const fsh=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(fsh,fs0);gl.compileShader(fsh);
+  const pr=gl.createProgram();gl.attachShader(pr,hwd?hwVso(hwd):vsObj);gl.attachShader(pr,fsh);
   ['aPos','aCol','aUV','aUV1','aUV2','aNQ','aView'].forEach((n,i)=>gl.bindAttribLocation(pr,i,n));gl.linkProgram(pr);
-  p={pr,fsh,pending:true,failed:null};
+  p={pr,fsh,pending:true,failed:null,isHW:!!hwd};
  }else{
- const pr=gl.createProgram();gl.attachShader(pr,compile(gl.VERTEX_SHADER,VS));gl.attachShader(pr,compile(gl.FRAGMENT_SHADER,fs));
+ const pr=gl.createProgram();gl.attachShader(pr,hwd?hwVso(hwd):compile(gl.VERTEX_SHADER,VS));gl.attachShader(pr,compile(gl.FRAGMENT_SHADER,fs0));
  ['aPos','aCol','aUV','aUV1','aUV2','aNQ','aView'].forEach((n,i)=>gl.bindAttribLocation(pr,i,n));gl.linkProgram(pr);
  if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw Error('WebGL link: '+gl.getProgramInfoLog(pr));
- p={pr};progUniforms(p);}
+ p={pr,isHW:!!hwd};progUniforms(p);}
  programs.set(fs,p);stats.programs++;if(programs.size>256){const k=programs.keys().next().value;gl.deleteProgram(programs.get(k).pr);programs.delete(k);progKeys.clear();}
  return p;}
 const FACTORS=()=>[gl.ZERO,gl.ONE,gl.SRC_COLOR,gl.ONE_MINUS_SRC_COLOR,gl.DST_COLOR,gl.ONE_MINUS_DST_COLOR,gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,
@@ -6814,6 +7016,9 @@ function attempt(g,m,indexedVertices,shader,opts={}){
  const vpW=Number.isFinite(halfW)&&halfW>0&&halfW<=2048?halfW:width/2,vpH=Number.isFinite(halfH)&&halfH>0&&halfH<=2048?halfH:height/2;
  const vpX=g.regs[0x68]&65535,vpY=(g.regs[0x68]>>>16)&65535;
  const mode=opts.mode||0;
+ if(HW.on&&mode>=0&&mode<=3){const T1=performance.now();let D=null;try{D=hwPrep(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height);}catch(e){D=null;stats.hwErr=String(e&&e.message).slice(0,300);}
+  stats.msVert=(stats.msVert||0)+performance.now()-T1;
+  if(D){const r=drawGL(g,m,addr,width,height,tex,D.cnt,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,null,D,shader);if(!(r&&r.hwFail))return r;}}
  if(typeof shader.runRaw==='function'&&mode>=0&&mode<=3){
   const T1=performance.now();VP.pending=null;let fn=fastVerticesPool(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height,VST);const gj=VP.pending;VP.pending=null;
   if(fn===-9)fn=fastVertices(g,m,indexedVertices,shader,mode,vpX,vpY,vpW,vpH,width,height);stats.msVert=(stats.msVert||0)+performance.now()-T1;stats.verts=(stats.verts|0)+(fn>0?fn:0);
@@ -7030,9 +7235,9 @@ function fastVertices(g,m,idx,shader,mode,vpX,vpY,vpW,vpH,width,height){
  }catch(e){return noJit?-3:-2;}
  return n;}
 function drawGL(...a){const t0=performance.now();try{return drawGL_(...a);}finally{stats.msGL=(stats.msGL||0)+performance.now()-t0;}}
-function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,GJ){
+function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,srcA,dstA,light,GJ,HWD,HSH){
  const rt=rtFor(m,addr,width,height,(g.regs[0x117]>>>16)&7);if(rt.memStale)upload(rt);
- const TP=performance.now();const p=programFor(g,light);if(p.pending&&!progReady(p))return {pixels:0,triangles:0,width,height,format:0,address:addr};if(p.failed)throw Error(p.failed);const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
+ const TP=performance.now();let p;try{p=programFor(g,light,HWD);}catch(e){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(e&&e.message).slice(0,300);return {hwFail:true};}throw e;}if(p.pending&&!progReady(p))return {pixels:0,triangles:0,width,height,format:0,address:addr};if(p.failed){if(HWD){HW.bad.add(HWD.vkey);stats.hwErr=String(p.failed).slice(0,300);return {hwFail:true};}throw Error(p.failed);}const FL=()=>{if(PB.n)flushBatch();};if(GC.prog!==p.pr){FL();gl.useProgram(p.pr);GC.prog=p.pr;}stats.msProg=(stats.msProg||0)+performance.now()-TP;
  // GC mirrors the GL state this function sets; other GL users call gcReset(). Unchanged state costs no GL call
  // (each call is an IPC round trip on mobile browsers).
  if(GC.fbo!==rt.fbo){FL();gl.bindFramebuffer(gl.FRAMEBUFFER,rt.fbo);GC.fbo=rt.fbo;}
@@ -7069,6 +7274,7 @@ function drawGL_(g,m,addr,width,height,tex,n,blendOn,eqRgb,eqA,srcRgb,dstRgb,src
   const up=(k,loc,a,two)=>{const o=L[k];let same=!!o;if(same)for(let i=0;i<a.length;i++)if(o[i]!==a[i]){same=false;break;}
    if(!same){FL();L[k]=Float32Array.from(a);if(two)gl.uniform2fv(loc,a);else gl.uniform3fv(loc,a);}};
   up('p',p.uLPos,U.pos);up('s0',p.uLS0,U.s0);up('s1',p.uLS1,U.s1);up('d',p.uLDif,U.dif);up('a',p.uLAmb,U.amb);up('sp',p.uLSpot,U.spot);up('da',p.uLDA,U.da,true);up('g',p.uLGAmb,U.gamb);}
+ if(HWD){FL();hwDraw(g,p,HWD,HSH);rt.gpuDirty=true;stats.draws++;return {pixels:0,triangles:HWD.cnt/3,width,height,format:0,address:addr};}
  if(PB.n&&PB.vst!==VST)FL();
  {const need=(PB.n+n)*VST;if(PB.buf.length<need){const nb=new Float32Array(Math.max(need,PB.buf.length*2));nb.set(PB.buf.subarray(0,PB.n*PB.vst));PB.buf=nb;}
   if(GJ)PB.tasks.push({job:GJ,off:PB.n*VST});else PB.buf.set(vdata.subarray(0,n*VST),PB.n*VST);PB.vst=VST;PB.n+=n;if(PB.n>=30000)flushBatch();}
@@ -7164,7 +7370,7 @@ class GPU{
   if(id>=0x2b1&&id<=0x2b4){const r=id-0x2b1,v=this.regs[id];this.shaderInts[r]=[v&255,(v>>>8)&255,(v>>>16)&255,v>>>24];}
   if(id===0x2c0){this.uniformIndex=this.regs[id]&255;this.uniformFormat32=!!(this.regs[id]&0x80000000);this.uniformWordQueue=[];}
   if(id>=0x2c1&&id<=0x2c8){this.uniformWordQueue.push(this.regs[id]);const need=this.uniformFormat32?4:3;
-   if(this.uniformWordQueue.length===need){if(this.uniformIndex<96){this.shaderUniforms[this.uniformIndex]=this.uniformFormat32?Shader.decodeUniform32(this.uniformWordQueue):Shader.decodeUniform24(...this.uniformWordQueue);this.uniformWrites++;}
+   if(this.uniformWordQueue.length===need){if(this.uniformIndex<96){this.uniVer=(this.uniVer|0)+1;this.shaderUniforms[this.uniformIndex]=this.uniformFormat32?Shader.decodeUniform32(this.uniformWordQueue):Shader.decodeUniform24(...this.uniformWordQueue);this.uniformWrites++;}
     this.uniformIndex=(this.uniformIndex+1)&255;this.uniformWordQueue=[];}}
   if((id===0x22e||id===0x22f)&&this.regs[id]===1){
    this.drawCalls++;
@@ -7794,7 +8000,7 @@ function createExecutionController(send){
    show:Math.round(perf.prev/dt*100),showMs:perf.prevN?+(perf.prev/perf.prevN).toFixed(1):0,mode:PM.mode+(PM.probing?'?':''),
    gl:typeof PICAWebGL!=='undefined'&&PICAWebGL.active,track:!(gs.trackOff),jit:typeof JitARM==='undefined'?'none':(JitARM.available?(JitARM.backend==='wasm'?'WASM JIT'+(globalThis.__ARENA_SHARED?' (shared mem)':''):'JS JIT'):'interpreter'),jitPct:Math.round(((JitARM?.stats?.instructions||0)-(perf.j0||0))*100/Math.max(1,(perf.ins1-(perf.ins0||0)))),compMs:Math.round(((JitARM?.stats?.compileMs||0)-(perf.c0||0))*1000/dt),mips:Math.round((perf.ins1-(perf.ins0||0))/dt/1000),idle:Math.max(0,Math.round((dt-perf.tick)/dt*100))};
   {const T=gs.glT||{};const P0=perf.g0||{};const arr=[];for(const k in T){if(k[0]==='#')continue;const d=T[k]-(P0[k]||0);if(d>=1)arr.push([k,d,(T['#'+k]|0)-(P0['#'+k]|0)]);}
-   arr.sort((a,b)=>b[1]-a[1]);{const ph=(k)=>Math.round(((gs[k]||0)-(perf[k+'0']||0))*100/dt);perf.last.ph='vert '+ph('msVert')+'% · tex '+ph('msTex')+'% · drawGL '+ph('msGL')+'% · draws '+((gs.draws|0)-(perf.dr0|0))+' · pool '+(gs.vpDraws|0)+(gs.vpBad?' BAD '+gs.vpBad:'')+'<br>pool: fetch '+ph('vpFetch')+'% · wait '+ph('vpWait')+'% · copy '+ph('vpCopy')+'% · '+Math.round(((gs.vpVerts|0)-(perf.vv0|0))/(dt/1000))+' verts/s ×'+(globalThis.__VPOOL_N||0);perf.last.ph+='<br>frames '+((gs.fsB|0)-(perf.fb0|0))+' · rendered '+((gs.fsR|0)-(perf.fr0|0))+' · attempts '+((gs.fsAtt|0)-(perf.fa0|0))+' · ok '+((gs.fsOk|0)-(perf.fo0|0))+' · ack '+sentFid+'/'+ackFid+' · interval '+(gs.fsDbg?gs.fsDbg[1]:0)+' ms · cost '+(gs.fsDbg?gs.fsDbg[0]:0)+' ms';perf.fb0=gs.fsB|0;perf.fr0=gs.fsR|0;perf.fa0=gs.fsAtt|0;perf.fo0=gs.fsOk|0;
+   arr.sort((a,b)=>b[1]-a[1]);{const ph=(k)=>Math.round(((gs[k]||0)-(perf[k+'0']||0))*100/dt);perf.last.ph='vert '+ph('msVert')+'% · tex '+ph('msTex')+'% · drawGL '+ph('msGL')+'% · draws '+((gs.draws|0)-(perf.dr0|0))+' · pool '+(gs.vpDraws|0)+(gs.vpBad?' BAD '+gs.vpBad:'')+'<br>pool: fetch '+ph('vpFetch')+'% · wait '+ph('vpWait')+'% · copy '+ph('vpCopy')+'% · '+Math.round(((gs.vpVerts|0)-(perf.vv0|0))/(dt/1000))+' verts/s ×'+(globalThis.__VPOOL_N||0)+(globalThis.__HWVS?' · HW '+(gs.hwDraws|0)+' draws'+(gs.hwErr?' ERR '+gs.hwErr.slice(0,80):'')+(gs.hwWhy?' why '+gs.hwWhy:''):'');perf.last.ph+='<br>frames '+((gs.fsB|0)-(perf.fb0|0))+' · rendered '+((gs.fsR|0)-(perf.fr0|0))+' · attempts '+((gs.fsAtt|0)-(perf.fa0|0))+' · ok '+((gs.fsOk|0)-(perf.fo0|0))+' · ack '+sentFid+'/'+ackFid+' · interval '+(gs.fsDbg?gs.fsDbg[1]:0)+' ms · cost '+(gs.fsDbg?gs.fsDbg[0]:0)+' ms';perf.fb0=gs.fsB|0;perf.fr0=gs.fsR|0;perf.fa0=gs.fsAtt|0;perf.fo0=gs.fsOk|0;
    perf.vpFetch0=gs.vpFetch||0;perf.vpWait0=gs.vpWait||0;perf.vpCopy0=gs.vpCopy||0;perf.vv0=gs.vpVerts|0;perf.msVert0=gs.msVert||0;perf.msTex0=gs.msTex||0;perf.msGL0=gs.msGL||0;perf.dr0=gs.draws|0;}
    perf.last.glTop=arr.slice(0,4).map(a=>a[0]+' '+Math.round(a[1]*1000/dt)/10+'% x'+a[2]).join(' · ');perf.g0=Object.assign({},T);}
   perf.tick=0;perf.prev=0;perf.prevN=0;perf.d0=gs.drawMs||0;perf.t0=now;perf.ins0=perf.ins1;perf.j0=JitARM?.stats?.instructions||0;perf.c0=JitARM?.stats?.compileMs||0;}
@@ -8164,8 +8370,8 @@ function fallback(){
 }
 try{
  const ids=['cia-code','arm-code','jit-code','wasm-engine-code','compression-code','firmware-code','ncch-crypto-code','loader-code','dsp-code','kernel-code','shader-code','raster-code','wasm-gpu-code','webgl-code','pica-code','scheduler-code','runtime-code','audio-code','ngword-hle-code','controller-code'];
- let poolPre='';try{if(window.crossOriginIsolated&&typeof SharedArrayBuffer!=='undefined'&&!/nopool/.test(location.hash)&&((navigator.hardwareConcurrency||4)>=4||/forcepool/.test(location.hash))){poolPre='globalThis.__VPOOL_URL='+JSON.stringify(URL.createObjectURL(new Blob([$('shader-code').textContent+'\n'+$('vpool-code').textContent],{type:'text/javascript'})))+';globalThis.VPOOL_CHECK='+(/poolcheck/.test(location.hash)?'true':'false')+';globalThis.__VPOOL_N='+(/forcepool/.test(location.hash)?2:Math.max(1,Math.min(6,(navigator.hardwareConcurrency||4)-2)))+';\n';}}catch(e){}
- const source=poolPre+ids.map(id=>$(id).textContent).join('\n')+'\nconst handle=createExecutionController((data,transfer)=>postMessage(data,transfer||[]));onmessage=event=>handle(event.data);postMessage({type:"worker-ready"});';
+ let poolPre='';const hwPre=/hwvs/.test(location.hash)&&!/nohwvs/.test(location.hash)?'globalThis.__HWVS=true;':'';try{if(window.crossOriginIsolated&&typeof SharedArrayBuffer!=='undefined'&&!/nopool/.test(location.hash)&&((navigator.hardwareConcurrency||4)>=4||/forcepool/.test(location.hash))){poolPre='globalThis.__VPOOL_URL='+JSON.stringify(URL.createObjectURL(new Blob([$('shader-code').textContent+'\n'+$('vpool-code').textContent],{type:'text/javascript'})))+';globalThis.VPOOL_CHECK='+(/poolcheck/.test(location.hash)?'true':'false')+';globalThis.__VPOOL_N='+(/forcepool/.test(location.hash)?2:Math.max(1,Math.min(6,(navigator.hardwareConcurrency||4)-2)))+';\n';}}catch(e){}
+ const source=hwPre+poolPre+ids.map(id=>$(id).textContent).join('\n')+'\nconst handle=createExecutionController((data,transfer)=>postMessage(data,transfer||[]));onmessage=event=>handle(event.data);postMessage({type:"worker-ready"});';
  workerURL=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));worker=new Worker(workerURL);
  execute=data=>{
   // Transfer the in-memory CXI rather than cloning 55+ MiB or forwarding the
