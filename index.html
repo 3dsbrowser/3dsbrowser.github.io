@@ -291,6 +291,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
   <label class="toggle-row"><span>CPU recompiler<small>Auto uses WebAssembly (much faster); JavaScript is the fallback</small></span><select id="cpu-backend" aria-label="CPU recompiler"><option value="auto">Auto</option><option value="wasm">WebAssembly</option><option value="js">JavaScript</option></select></label>
   <label class="toggle-row"><span>GPU rendering (WebGL)<small id="webgl-status">Draw with the graphics card; falls back to software</small></span><input id="webgl-toggle" type="checkbox" checked></label>
   <label class="toggle-row"><span>Auto frame skip<small>Only draw the frames that are shown (about 15 per second)</small></span><input id="frame-skip" type="checkbox" checked></label>
+  <label class="toggle-row"><span>Mirror bottom screen when top is blank<small>Turn off to avoid GPU screen-detection checks</small></span><input id="mirror-bottom" type="checkbox" checked></label>
   <div class="menu-info">
    <p><span id="guest-preview-status">Waiting for guest framebuffer.</span></p>
    <p>Screen: <span id="live-screen-name">AUTO DISPLAY</span></p>
@@ -6505,7 +6506,7 @@ function displayTransfer(m,src,dst,sw,sh,dw,dh,srcFmt,dstFmt,flags){gcReset();
 // the GPU). Screen i occupies x = i*256, rows 0..h-1 of the bitmap, with image
 // row y = LCD memory row y (the same layout decodeFramebuffer produces).
 // list: [{addr,w,h,fmt,stride}] -> {bitmap,shown:[bool]} or null.
-function present(m,list){gcReset();
+function present(m,list,detectTop=true){gcReset();
  if(!gl||!enabled)return null;const c=gl.canvas;if(!c||typeof c.transferToImageBitmap!=='function')return null;
  const W=512,H=512;let any=false;const shown=[];
  for(let i=0;i<list.length;i++){const q=list[i],l=lcds.get(q.addr>>>0);
@@ -6517,7 +6518,7 @@ function present(m,list){gcReset();
   if(l.flip)gl.blitFramebuffer(0,0,w,h,x,H-h,x+w,H,gl.COLOR_BUFFER_BIT,gl.NEAREST);
   else gl.blitFramebuffer(0,0,w,h,x,H,x+w,H-h,gl.COLOR_BUFFER_BIT,gl.NEAREST);}
  if(!any)return null;
- const topLit=litProbe(list[0],shown[0]);
+ const topLit=detectTop?litProbe(list[0],shown[0]):true;
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
  gl.colorMask(false,false,false,true);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.colorMask(true,true,true,true);
  stats.presents=(stats.presents|0)+1;
@@ -8008,7 +8009,7 @@ function createExecutionController(send){
  // not rasterized at all (the game logic still runs every frame), which is where
  // most of the time went: the old preview showed one frame per 800 ms but
  // rasterized every frame.
- let webglWanted=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;let fsMul=3,fsCtlT=0;
+ let webglWanted=true,mirrorBottom=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;let fsMul=3,fsCtlT=0;
  let gameFrames=0,previewsSent=0,sentFid=0,ackFid=0;
  // Frames reach the page either as a GPU ImageBitmap ('bitmap') or by reading
  // the pixels back ('readback'). Which is faster depends on the device, so the
@@ -8147,7 +8148,7 @@ function createExecutionController(send){
    const list=[['top',400],['bottom',320]];let done=[false,false];
    if(typeof PICAWebGL!=='undefined'&&PICAWebGL.active&&PM.mode==='bitmap'){
     const q=list.map(([screen,height])=>{const d=screens[screen];if(targets?.only&&!targets[screen])return {addr:-1,w:0,h:0,fmt:-1};return d&&d.left?{addr:(targets&&targets[screen])||d.left,w:240,h:height,fmt:d.format&7,stride:d.stride|0}:{addr:-1,w:0,h:0,fmt:-1};});
-    const r=PICAWebGL.present(machine.memory,q);
+    const r=PICAWebGL.present(machine.memory,q,mirrorBottom);
     if(r){done=r.shown;sentFid=fid;send({type:'guest-bitmap',fid,bitmap:r.bitmap,topLit:r.topLit,screens:list.map(([screen,height],i)=>r.shown[i]?{screen,width:240,height,sx:i*256}:null).filter(Boolean)},[r.bitmap]);success=true;}
    }
    for(let si=0;si<list.length;si++){const [screen,height]=list[si];if(done[si])continue;
@@ -8271,6 +8272,7 @@ function createExecutionController(send){
     const parsed=Local3DSAssets.parseKeyBundle(data.text);keyring=parsed.titleKeys;aesKeyring=parsed.aesKeys;send({type:'asset-status',asset:'keys',text:keyring.size+' title keys and '+aesKeyring.size+' Azahar AES entries loaded locally (no key values displayed). NCCH AES-CTR decryption available; seed-encrypted titles require seeddb.bin.'});
    }else if(data.type==='cpu-backend'){if(typeof JitARM!=='undefined'&&JitARM.setBackend)JitARM.setBackend(data.mode);
    }else if(data.type==='webgl'){webglWanted=!!data.enabled;if(typeof PICAWebGL!=='undefined'){if(webglWanted)PICAWebGL.init();PICAWebGL.enabled=webglWanted;}send({type:'webgl-status',available:typeof PICAWebGL!=='undefined'&&PICAWebGL.available,error:typeof PICAWebGL!=='undefined'?PICAWebGL.error:'missing'});
+   }else if(data.type==='mirror-bottom'){mirrorBottom=!!data.enabled;
    }else if(data.type==='frame-skip'){frameSkip=!!data.enabled;if(!frameSkip){fsRender=true;if(machine.gpu)machine.gpu.skipRaster=false;}
    }else if(data.type==='speed-limit'){speedLimit=!!data.enabled;paceWall=performance.now();paceVirt=virtMs();
    }else if(data.type==='clock'){
@@ -8313,7 +8315,7 @@ function createExecutionController(send){
 'use strict';
 const $=id=>document.getElementById(id);
 let execute,worker,workerURL,loaded=false,autoLaunchPending=false;
-const logs=[];let logSize=0;let topBlank=true;let rateMark=0,rateInstructions=0,armIps=0;
+const logs=[];let logSize=0;let topBlank=true,mirrorBottomUI=true;let rateMark=0,rateInstructions=0,armIps=0;
 const statuses={empty:'Choose a file or load the included test.',ready:'Executable loaded. Ready to execute.',paused:'Paused.',waiting:'All guest threads waiting on synchronization.',exited:'Process exited.',fault:'Execution stopped on an unsupported operation or fault.',blocked:'File could not be executed.'};
 function log(text){logs.push(text);logSize+=text.length;while(logSize>20000&&logs.length>1)logSize-=logs.shift().length;$('log').textContent=logs.join('');}
 function receive(data){
@@ -8383,7 +8385,7 @@ function showScreen(data){if(data.screen==='top')fpsShown++;
    // GPU bitmaps are never read back here (that would stall the page on the
    // GPU); the worker reports whether the top screen has content.
    if(bmp&&typeof data.topLit==='boolean')topBlank=!data.topLit;
-   if(pixels){let lit=0;const step=4*53;for(let i=0;i<pixels.length;i+=step){if(pixels[i]>15||pixels[i+1]>15||pixels[i+2]>15){if(++lit>=3)break;}}
+   if(pixels&&mirrorBottomUI){let lit=0;const step=4*53;for(let i=0;i<pixels.length;i+=step){if(pixels[i]>15||pixels[i+1]>15||pixels[i+2]>15){if(++lit>=3)break;}}
    topBlank=lit<3;}
    if(!topBlank){
     canvas.classList.remove('bottom-mirror');$('live-screen-name').textContent='TOP LCD';
@@ -8545,6 +8547,7 @@ $('webgl-toggle').addEventListener('change',()=>execute({type:'webgl',enabled:$(
  if(sel){sel.value=['auto','wasm','js'].includes(saved)?saved:'auto';if(sel.value!=='auto')execute({type:'cpu-backend',mode:sel.value});
   sel.addEventListener('change',()=>{try{localStorage.setItem('cpu-backend',sel.value);}catch{}execute({type:'cpu-backend',mode:sel.value});});}}
 $('frame-skip').addEventListener('change',()=>execute({type:'frame-skip',enabled:$('frame-skip').checked}));
+$('mirror-bottom').addEventListener('change',()=>{mirrorBottomUI=$('mirror-bottom').checked;if(!mirrorBottomUI)topBlank=false;execute({type:'mirror-bottom',enabled:mirrorBottomUI});});
 $('run').onclick=()=>{autoLaunchPending=false;execute({type:'run'});};$('step').onclick=()=>{stopMicrophone();execute({type:'step'});};$('pause').onclick=()=>{stopMicrophone();autoLaunchPending=false;execute({type:'pause'});};
 $('copy-debug').onclick=async()=>{
  const sections=[['Status','status'],['Program','program'],['CPU engine','cpu-engine-status'],['ARM throughput','cpu-throughput'],['GPU','gpu-stats'],['System archives','system-archives-status'],['Recent service totals','service-trace'],['Threads','thread-trace'],['Registers','registers'],['Guest log','log']];
