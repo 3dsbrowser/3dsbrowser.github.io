@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0320 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0322 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -323,7 +323,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0320 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0322 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -4407,11 +4407,12 @@ class Kernel{
     // check() above proved every page in [addr, addr+bytes) is mapped and readable.
     // Reads never mutate memory, so resolve each page once instead of per word.
     let pageBase=-1,pageData=null;
-    for(let i=0;i<words.length;i++){
+    for(let i=0;i<words.length;){
      const a=(addr+i*4)>>>0,base=(a&~4095)>>>0;
      if(base!==pageBase){pageData=mem.pages.get(base).data;pageBase=base;}
-     const o=a&4095;
-     words[i]=(pageData[o]|pageData[o+1]<<8|pageData[o+2]<<16|pageData[o+3]<<24)>>>0;
+     const o=a&4095,n=Math.min(words.length-i,(4096-o)>>>2);
+     if(!(pageData.byteOffset&3)&&!(o&3)){words.set(new Uint32Array(pageData.buffer,pageData.byteOffset+o,n),i);i+=n;}
+     else{for(let k=0;k<n;k++,i++){const q=o+k*4;words[i]=(pageData[q]|pageData[q+1]<<8|pageData[q+2]<<16|pageData[q+3]<<24)>>>0;}}
     }
     if(!this.gpu)throw Error('GX PICA command submission requires GPU decoder');
     this.gpu.submit(words);
@@ -4782,7 +4783,7 @@ function f24(word){word>>>=0;const s=(word&0x800000)?-1:1,e=(word>>>16)&0x7f,m=w
 }
 // Packed float24 uniform upload: the first word carries w, the last carries x (as with float32 uploads).
 function decodeUniform24(a,b,c){return [f24(c&0xffffff),f24(((b&65535)<<8)|(c>>>24)),f24(((a&255)<<16)|(b>>>16)),f24(a>>>8)];}
-function decodeUniform32(words){const buf=new DataView(new ArrayBuffer(4));return words.slice().reverse().map(word=>{buf.setUint32(0,word,true);return buf.getFloat32(0,true);});}
+const _du32=new DataView(new ArrayBuffer(4));function decodeUniform32(words){const n=words.length,out=new Array(n);for(let i=0;i<n;i++){_du32.setUint32(0,words[n-1-i]>>>0,true);out[i]=_du32.getFloat32(0,true);}return out;}
 const opnames=['ADD','DP3','DP4','DPH','DST','EX2','LG2','LITP','MUL','SGE','SLT','FLR','MAX','MIN','RCP','RSQ'];
 const vec=v=>[v?.[0]??0,v?.[1]??0,v?.[2]??0,v?.[3]??0];
 class VertexShader{
@@ -6846,7 +6847,7 @@ FV.f32=new Float32Array(FV.sc8.buffer);
 // ------------------------------------------------- vertex-shader worker pool (needs cross-origin isolation)
 // Draws are queued: the emulator fetches the vertex inputs, publishes a job into one of S shared slots and moves on; workers shade
 // in parallel while the emulator keeps recording draws. The rows are collected when the batch is drawn (flushBatch -> vpResolve).
-const VP={tried:false,ready:false,K:0,up:0,workers:[],S:8,CAP:8192,stamp:new Int32Array(65536),slot:new Int32Array(65536),cur:0,slotIdx:[],plan:[],sc8:new Uint8Array(4),sem:new Int8Array(24),MIN:160,ids:new Map(),nextId:0,queue:[],jobs:0,pending:null};
+const VP={tried:false,ready:false,K:0,up:0,workers:[],S:8,CAP:8192,stamp:new Int32Array(65536),slot:new Int32Array(65536),cur:0,slotIdx:[],plan:[],sc8:new Uint8Array(4),sem:new Int8Array(24),MIN:40,ids:new Map(),nextId:0,queue:[],jobs:0,pending:null};
 VP.f32=new Float32Array(VP.sc8.buffer);
 function vpInit(){
  if(typeof SharedArrayBuffer==='undefined'||!globalThis.crossOriginIsolated||!globalThis.__VPOOL_URL||typeof Worker==='undefined')return;
@@ -7134,7 +7135,7 @@ class GPU{
  }
  writeReg(id,value,mask=15){
   if(!Number.isInteger(id)||id<0||id>=this.regs.length)throw Error('PICA register out of range');
-  let keep=0;for(let i=0;i<4;i++)if(mask&(1<<i))keep|=(255<<(8*i));
+  let keep=0;if(mask===15)keep=-1;else for(let i=0;i<4;i++)if(mask&(1<<i))keep|=(255<<(8*i));
   const previous=this.regs[id];this.regs[id]=((previous&~keep)|(value&keep))>>>0;
   // Code/data FIFO aliases 0x2cc-0x2d3 and 0x2d6-0x2dd are distinct
   // consecutive command IDs feeding one incrementing code-memory cursor.
@@ -7754,7 +7755,7 @@ function createExecutionController(send){
  // not rasterized at all (the game logic still runs every frame), which is where
  // most of the time went: the old preview showed one frame per 800 ms but
  // rasterized every frame.
- let webglWanted=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;
+ let webglWanted=true,frameSkip=true,fsRender=true,fsForce=false,fsLastPreview=0,fsLastBoundaryPreview=0;let FS_INTERVAL=33;const FS_MAX=1000;let fsMul=3,fsCtlT=0;
  let gameFrames=0,previewsSent=0,sentFid=0,ackFid=0;
  // Frames reach the page either as a GPU ImageBitmap ('bitmap') or by reading
  // the pixels back ('readback'). Which is faster depends on the device, so the
@@ -7797,7 +7798,8 @@ function createExecutionController(send){
  function onFrameBoundary(){gameFrames++;if(typeof PICAWebGL!=='undefined')PICAWebGL.frame();pmTick(performance.now());
   const now=performance.now();
   {const dm=(typeof PICAWebGL!=='undefined'&&PICAWebGL.stats.drawMs)||0;if(fsWasRendered&&dm>fsD0)fsCost=fsCost?fsCost*0.7+(dm-fsD0)*0.3:(dm-fsD0);fsD0=dm;
-   FS_INTERVAL=Math.max(33,Math.min(FS_MAX,Math.round(fsCost*(fsCost>150?2:3))));}
+   {if(!(fsMul>0))fsMul=3;if(now-fsCtlT>400&&perf.last){fsCtlT=now;const idle=perf.last.idle;if(idle>18)fsMul*=0.88;else if(idle<6)fsMul*=1.25;fsMul=Math.max(1.15,Math.min(4,fsMul));}
+   FS_INTERVAL=Math.max(33,Math.min(FS_MAX,Math.round(fsCost*fsMul)));}}
   const k=machine.kernel,xo=k?.fsXferOk,ready=!xo||xo.top||xo.bottom;
   if(ready&&(fsForce||(now-fsLastPreview>=FS_INTERVAL&&sentFid-ackFid<2))){fsForce=false;const pt=performance.now();
    // Show only screens whose latest transfer was fully rendered; the others keep their last picture.
