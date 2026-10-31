@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head>
-<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0335 WASM GPU/IPC</title><style>
+<script src="coi-serviceworker.js"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0e1014"><title>3DS Execution Lab · v0.0336 WASM GPU/IPC</title><style>
 :root{color-scheme:dark;--bg:#0e1014;--surface:#161a20;--surface-2:#1d222a;--surface-3:#262c36;--outline:#2a313b;--text:#e8ecf1;--muted:#9aa4b1;--faint:#6b7585;--accent:#a8b8ff;--on-accent:#0d1220;--accent-soft:rgba(168,184,255,.16);--ok:#6be0cc;--warn:#efc887;--danger:#ffb4a9;--ctl-bg:rgba(255,255,255,.10);--ctl-line:rgba(255,255,255,.22);--ctl-ink:rgba(255,255,255,.92);--r-lg:24px;--r-md:16px;--r-sm:12px;--btn:58px;--btn:clamp(44px,12.5vw,60px);--w:min(calc(100vw - 24px),720px,calc((100vh - 372px)/1.24))}
 @supports(height:100dvh){:root{--w:min(calc(100vw - 24px),720px,calc((100dvh - 372px)/1.24))}}
 @media(max-height:700px){:root{--btn:clamp(40px,11vw,52px);--w:min(calc(100vw - 24px),720px,calc((100dvh - 360px)/1.24))}.ctl-l,.ctl-r{margin-top:-28px}}
@@ -215,7 +215,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
 </style></head><body data-view="library" data-sheet="">
 <main class="library" id="library" aria-label="Game library">
  <header class="appbar">
-  <h1>3DBS - v0.0335</h1>
+  <h1>3DBS - v0.0336</h1>
   <button type="button" class="icon" data-open-settings aria-label="Open settings" aria-haspopup="dialog" title="Settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
  </header>
  <section class="lib-section" aria-labelledby="games-title">
@@ -325,7 +325,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:220px;m
    <details><summary>Optional 3DS system data archives</summary><div class="settings-content"><div class="field"><label for="mii-cfa-file">Mii system archive (0004009B00010202)</label><input type="file" id="mii-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>Import a decrypted Mii-data CFA or IVFC RomFS before loading a game.</small></div><div class="settings-row"><button id="mii-cfa-clear" type="button" class="ghost">Clear Mii archive</button></div><div id="mii-cfa-status" class="console-status" role="status">Embedded Mii archive ready by default.</div><div class="separator"></div><div class="field"><label for="system-cfa-file">NGWord system CFA (decrypted)</label><input type="file" id="system-cfa-file" class="file-input" accept=".cfa,.app,.romfs,.bin"><small>The emulator defaults to a synthetic NGWord compatibility filesystem with an empty four-byte version and no word list. Import your own decrypted CFA to replace it. The fallback is NOT real system data; a guest reload is required.</small></div><div class="settings-row"><button id="ngword-hle-button" type="button" class="outline">Use synthetic NGWord archive</button><button id="system-cfa-clear" type="button" class="ghost">Disable all NGWord data</button></div><div id="system-cfa-status" class="console-status" role="status">Synthetic NGWord HLE enabled by default: root and /version.dat only. Reload after changing this setting.</div></div></details>
    <details><summary>Export a private HTML</summary><div class="settings-content"><div class="portable-tools"><h3>Single-file portable build</h3><p>Bundle your locally imported firmware with the emulator. Optional private keys can be included when explicitly selected.</p><label><input type="checkbox" id="portable-include-keys"> Include any additional imported keys (private use only)</label><button id="export-portable" type="button" class="outline" disabled>Export portable HTML</button><div class="console-status" id="portable-status" role="status">Firmware import is optional.</div></div><small>Any embedded AES entries can be read by opening the HTML source. Never share private builds.</small></div></details>
    <details><summary>Editing embedded title keys</summary><div class="settings-content"><small>The HTML contains an editable <code>embedded-title-keys</code> slot for advanced users. Only use keys from software and hardware you own.</small></div></details>
-   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0335 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
+   <p class="about">Compatibility preview: Terraria reaches the title menu and name keyboard.<br>3DS Execution Lab v0.0336 · Experimental preservation and learning project · Not affiliated with Nintendo</p>
   </section>
   <section class="dock-panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" hidden>
    <p class="hint">Host playback and limited 3DS DSP service emulation. Terraria audio is not verified; the test tone comes from the emulator backend, not the game.</p>
@@ -8122,7 +8122,7 @@ function createExecutionController(send){
  function onFrameBoundary(){gameFrames++;if(typeof PICAWebGL!=='undefined')PICAWebGL.frame();pmTick(performance.now());
   const now=performance.now();
   {const dm=(typeof PICAWebGL!=='undefined'&&PICAWebGL.stats.drawMs)||0;if(fsWasRendered&&dm>fsD0)fsCost=fsCost?fsCost*0.7+(dm-fsD0)*0.3:(dm-fsD0);fsD0=dm;
-   {if(!(fsMul>0))fsMul=3;if(now-fsCtlT>400&&perf.last){fsCtlT=now;const idle=perf.last.idle;if(idle>18)fsMul*=0.88;else if(idle<6)fsMul*=1.25;fsMul=Math.max(1.15,Math.min(4,fsMul));}
+   {if(!(fsMul>0))fsMul=3;if(now-fsCtlT>400&&perf.last){fsCtlT=now;const idle=perf.last.idle;if(idle>18)fsMul*=idle>35?0.7:0.85;else if(idle<6)fsMul=Math.max(0.6,fsMul)*1.25;fsMul=Math.min(4,fsMul);if(fsMul<0.35)fsMul=0;}
    FS_INTERVAL=Math.max(33,Math.min(FS_MAX,Math.round(fsCost*fsMul)));if(FS_INTERVAL<=50)FS_INTERVAL=0;}}
   const k=machine.kernel,xo=k?.fsXferOk,ready=!xo||xo.top||xo.bottom;
   if(ready&&(fsForce||(now-fsLastPreview>=FS_INTERVAL&&sentFid-ackFid<2))){fsForce=false;const pt=performance.now();
@@ -8681,7 +8681,7 @@ $('mirror-bottom').addEventListener('change',()=>{mirrorBottomUI=$('mirror-botto
 $('run').onclick=()=>{autoLaunchPending=false;execute({type:'run'});};$('step').onclick=()=>{stopMicrophone();execute({type:'step'});};$('pause').onclick=()=>{stopMicrophone();autoLaunchPending=false;execute({type:'pause'});};
 $('copy-debug').onclick=async()=>{
  const sections=[['Status','status'],['Program','program'],['CPU engine','cpu-engine-status'],['ARM throughput','cpu-throughput'],['GPU','gpu-stats'],['3D backend','webgl-status'],['Display backend','webgpu-status'],['System archives','system-archives-status'],['Recent service totals','service-trace'],['Threads','thread-trace'],['Registers','registers'],['Guest log','log']];
- const message='3DS Execution Lab v0.0335 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
+ const message='3DS Execution Lab v0.0336 · '+navigator.userAgent+'\n'+sections.map(([label,id])=>'\n'+label+':\n'+($(id)?.textContent||'(unavailable)')).join('\n');
  try{await navigator.clipboard.writeText(message);$('copy-debug').textContent='Copied!';}catch(e){
   const pad=document.createElement('textarea');pad.value=message;pad.style.cssText='position:fixed;top:20%;left:5%;width:90%;height:40%;z-index:9999;background:#111;color:white';
   document.body.appendChild(pad);pad.select();$('copy-debug').textContent='Select & copy text';
